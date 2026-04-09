@@ -118,3 +118,55 @@ npx tsc --init
 import { version, name } from "../package.json";
 app.get("/api/version", (c) => c.json({ version: version, vendor: name }));
 ```
+### 4.2 补充逻辑
+
+### 4.3 编译成命令
+增加 npm build
+```json
+// package.json 修改
+{
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc && tsx scripts/make-cli.ts",
+        "start": "node dist/index.js"
+    }
+}
+```
+
+新建make-cli脚本
+```ts
+// scripts/make-cli.ts
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const distPath = join(process.cwd(), "dist", "index.js");
+const cliHeader = "#!/usr/bin/env node\n";
+
+if (!existsSync(distPath)) {
+    console.error(`错误: 未找到 ${distPath}，请先执行构建`);
+    process.exit(1);
+}
+
+let content = readFileSync(distPath, "utf8");
+if (!content.startsWith(cliHeader)) {
+    content = `${cliHeader}${content}`;
+    writeFileSync(distPath, content, "utf8");
+}
+
+chmodSync(distPath, 0o755);
+console.log(`已生成可执行 CLI: ${distPath}`);
+```
+
+开始构建并测试
+```bash
+npm run build
+npm run start
+
+npx mock-ollama -h
+```
+
+全局关联
+```bash
+npm link
+mock-ollama -h
+```

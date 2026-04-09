@@ -2,9 +2,14 @@
   "name": "mock-ollama",
   "version": "0.1.0",
   "description": "模拟ollama接口，来监控数据",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc && tsx scripts/make-cli.ts",
+    "start": "node dist/index.js"
+  },
+  "bin": {
+    "mock-ollama": "./dist/index.js"
   },
   "keywords": [],
   "author": "eos.",

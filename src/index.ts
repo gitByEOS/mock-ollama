@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { config as loadEnv } from "dotenv";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { version, name } from "../package.json";
+import { name } from "../package.json";
 import { Utils } from "./utils";
 // 加载环境变量
 loadEnv();
@@ -11,6 +11,7 @@ loadEnv();
 type ProviderName = "bigmodel" | "anthropic" | "mock-anthropic" | "unknown";
 type AgentApiConfig = {
     chat: string;
+    tags: string;
 }
 type ProviderConfig = {
     name: ProviderName;
@@ -40,13 +41,14 @@ function processProviderName(baseUrl: string) {
         return "unknown";
     }
 }
-function processApiPath(providerName: ProviderName) {
+function processApiPath(providerName: ProviderName): AgentApiConfig | null {
     switch (providerName) {
         case "anthropic":
+            return { chat: "/v1/messages", tags: "/models" };
         case "mock-anthropic":
-            return {chat: "/v1/messages"};
+            return { chat: "/v1/messages", tags: "/v1/models" };
         case "bigmodel":
-            return {chat: "/chat/completions"};
+            return { chat: "/chat/completions", tags: "/v1/models" };
         default:
             return null;
     }
@@ -69,7 +71,51 @@ function buildResponseHeaders(headers: HeadersInit) {
 // 代理服务
 const app = new Hono();
 app.get("/", (c) => c.text("ok"));
-app.get("/api/version", (c) => c.json({ version: version, vendor: name }));
+app.get("/api/version", (c) => c.json({ version: "0.18.2", from: name }));
+
+app.get("/api/tags", async (c) => {
+    // 从配置中获取 tags 端点路径
+    const startTime = Date.now();
+    const headers = new Headers({
+        "Authorization": `Bearer ${G_ProviderConfig.apikey}`,
+        "Content-Type": "application/json",
+    });
+    try {
+        console.log(`[${Utils.timeNow()}] [请求] GET /api/tags`);
+        const realRequestUrl = `${G_ProviderConfig.baseUrl}${G_ProviderConfig.apiPath?.tags}`;
+        Utils.dumpObject("发送请求", { url: realRequestUrl, method: "GET", headers: headers});
+
+        const res = await fetch(realRequestUrl, {
+            method: "GET",
+            headers: headers,
+        });
+        console.log(`[${Utils.timeNow()}] [上游响应] status=${res.status}`);
+
+        const models: { name: string; model: string }[] = [];
+        if (res.ok) {
+            const data = await res.json();
+            Utils.dumpObject("请求回应", { status: res.status, headers: res.headers, body: data });
+            // OpenAI 格式: data.data = [{id: "model-name"}]
+            // Anthropic 格式: data.models = [{id: "model-name"}]
+            const items = data.data || data.models || [];
+            for (const item of items) {
+                const modelId = item.id;
+                if (modelId) {
+                    models.push({
+                        name: modelId,
+                        model: modelId,
+                    });
+                }
+            }
+        }
+        console.log(`[${Utils.timeNow()}] [响应] /api/tags (耗时: ${Date.now() - startTime}ms)`);
+        return c.json({ models: models });
+
+    } catch (e) {
+        console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
+        return c.json({ error: String(e) }, 500);
+    }
+});
 app.post("/v1/messages", async (c) => {
     const startTime = Date.now();
     const body = await c.req.json();

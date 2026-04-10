@@ -9,8 +9,16 @@ export class Utils {
     private static readonly SSE_LOG_TEXT_MAX = 4000;
     private static readonly TEXT_PREVIEW_MAX = 8000;
     private static readonly INVALID_JSON_PREVIEW_MAX = 2000;
+    private static isObjectDumpQuiet = false;
+
+    static setObjectDumpQuiet(isQuiet: boolean) {
+        this.isObjectDumpQuiet = isQuiet;
+    }
 
     static dumpObject(name: string, info: unknown) {
+        if (this.isObjectDumpQuiet) {
+            return;
+        }
         try {
             const normalized: Record<string, unknown> = {};
             for (const [key, value] of Object.entries((info ?? {}) as Record<string, unknown>)) {
@@ -22,7 +30,6 @@ export class Utils {
         }
     }
 
-    /** 日志时间：本机 YYYY-MM-DD HH:mm:ss.SSS */
     static timeNow() {
         const d = new Date();
         const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -101,6 +108,14 @@ export class Utils {
             };
         }
         return text;
+    }
+
+    static mergeProviderPresetMap(
+        providerPresetMap: Record<string, { matchStr: string; apiPath: { chat: string; tags: string } }>,
+        rawJson: string | undefined,
+    ) {
+        const extraPresetMap = this.parseProviderPresetJson(rawJson);
+        Object.assign(providerPresetMap, extraPresetMap);
     }
 
     private static normalizeDumpValue(value: unknown): unknown {
@@ -251,5 +266,49 @@ export class Utils {
             return (parsed as { type: unknown }).type;
         }
         return typeof parsed;
+    }
+
+    private static isAgentApiConfig(value: unknown): value is { chat: string; tags: string } {
+        if (!value || typeof value !== "object") {
+            return false;
+        }
+        const config = value as Record<string, unknown>;
+        return typeof config.chat === "string" && typeof config.tags === "string";
+    }
+
+    private static parseProviderPresetJson(rawJson: string | undefined) {
+        if (!rawJson) {
+            return {};
+        }
+
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(rawJson);
+        } catch (e) {
+            throw new Error(`provider preset json 解析失败: ${String(e)}`);
+        }
+
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("provider preset json 必须是对象");
+        }
+
+        const nextPresetMap: Record<string, { matchStr: string; apiPath: { chat: string; tags: string } }> = {};
+        for (const [providerName, providerPreset] of Object.entries(parsed as Record<string, unknown>)) {
+            if (!providerPreset || typeof providerPreset !== "object" || Array.isArray(providerPreset)) {
+                throw new Error(`provider ${providerName} 配置必须是对象`);
+            }
+            const preset = providerPreset as Record<string, unknown>;
+            if (typeof preset.matchStr !== "string" || preset.matchStr.length === 0) {
+                throw new Error(`provider ${providerName} 的 matchStr 必须是非空字符串`);
+            }
+            if (!this.isAgentApiConfig(preset.apiPath)) {
+                throw new Error(`provider ${providerName} 的 apiPath 必须包含 chat 和 tags 字符串`);
+            }
+            nextPresetMap[providerName] = {
+                matchStr: preset.matchStr,
+                apiPath: preset.apiPath,
+            };
+        }
+        return nextPresetMap;
     }
 }

@@ -8,7 +8,7 @@ import { Utils } from "./utils";
 // 加载环境变量
 loadEnv();
 
-type ProviderName = "deepseek" | "zhipu" | "anthropic" | "mock-anthropic" | "unknown";
+type ProviderName = string;
 type AgentApiConfig = {
     chat: string;
     tags: string;
@@ -17,6 +17,7 @@ type ProviderPreset = {
     matchStr: string;
     apiPath: AgentApiConfig;
 }
+type ProviderPresetMap = Record<string, ProviderPreset>;
 type ProviderConfig = {
     name: ProviderName;
     baseUrl: string;
@@ -31,7 +32,7 @@ let G_ProviderConfig : ProviderConfig = {
     apiPath: null,
 }
 
-const PROVIDER_PRESET_MAP: Record<Exclude<ProviderName, "unknown">, ProviderPreset> = {
+const PROVIDER_PRESET_MAP: ProviderPresetMap = {
     "anthropic": {
         matchStr: "api.anthropic.com",
         apiPath: { chat: "/v1/messages", tags: "/models" },
@@ -40,10 +41,10 @@ const PROVIDER_PRESET_MAP: Record<Exclude<ProviderName, "unknown">, ProviderPres
         matchStr: "/anthropic",
         apiPath: { chat: "/v1/messages", tags: "/v1/models" },
     },
-    "zhipu": {
-        matchStr: "bigmodel.cn",
-        apiPath: { chat: "/chat/completions", tags: "/models" },
-    },
+    // "zhipu": {
+    //     matchStr: "bigmodel.cn",
+    //     apiPath: { chat: "/chat/completions", tags: "/models" },
+    // },
     "deepseek": {
         matchStr: "api.deepseek.com",
         apiPath: { chat: "/chat/completions", tags: "/models" },
@@ -59,7 +60,7 @@ function processProviderName(baseUrl: string): ProviderName {
     return "unknown";
 }
 function processApiPath(providerName: ProviderName): AgentApiConfig | null {
-    return providerName === "unknown" ? null : PROVIDER_PRESET_MAP[providerName].apiPath;
+    return PROVIDER_PRESET_MAP[providerName]?.apiPath ?? null;
 }
 
 function buildRequestHeaders(headers: HeadersInit) {
@@ -211,7 +212,7 @@ app.all("*", async (c) => {
         headers: c.req.raw.headers,
         body: await readRequestBodyForLog(c.req.raw),
     };
-    Utils.dumpObject("收到兜底请求", requestInfo);
+    Utils.dumpObject("收到未知请求", requestInfo);
     return c.json({
         ok: false,
         error: "收到未匹配路由请求",
@@ -220,11 +221,30 @@ app.all("*", async (c) => {
 
 // 主函数：解析参数并启动服务器
 async function main() {
+    const providerPresetDemo = [
+        "\n环境变量配置示例:",
+`export MOCK_OLLAMA_BASE_URL="https://open.bigmodel.cn/api/paas/v4"`,
+`export MOCK_OLLAMA_API_KEY="your-api-key"`,
+`export MOCK_OLLAMA_PROVIDER_PRESET='{
+    "my-glm": {
+            "matchStr": "bigmodel.cn",
+            "apiPath": {
+            "chat": "/chat/completions",
+            "tags": "/models"
+        }
+    }
+}'`,
+    "\n请求示例:",
+    `1. curl http://localhost:11434/api/version`,
+    `2. curl http://localhost:11434/api/tags`,
+    `3. curl -X POST http://localhost:11434/chat/completions -H "Content-Type: application/json" -d '{"model": "glm-4.7-flash", "messages": [{"role": "user", "content": "你是谁？"}]}'`,
+    ].join("\n");
     const cli = await yargs(hideBin(process.argv))
             .usage('Usage: mock-ollama [command] <options>') 
             .scriptName("mock-ollama")
             .alias("v", "version")
             .alias("h", "help")
+            .alias("q", "quiet")
             .option("port", {
                 type: "number",
                 description: "模拟 ollama server port",
@@ -241,9 +261,20 @@ async function main() {
                 type: "string",
                 description: "上游服务商 url，或者export MOCK_OLLAMA_BASE_URL",
             })
+            .option("provider-preset", {
+                type: "string",
+                description: "额外 provider JSON配置，或者 export MOCK_OLLAMA_PROVIDER_PRESET",
+            })
+            .option("quiet", {
+                type: "boolean",
+                description: "安静模式，或者 export MOCK_OLLAMA_QUIET=1",
+            })
+            .epilog(providerPresetDemo)
             .parse();
     const port = cli.port ?? 11434;
     const host = cli.host ?? "localhost";
+    const isQuiet = cli.quiet ?? process.env.MOCK_OLLAMA_QUIET === "1";
+    Utils.setObjectDumpQuiet(isQuiet);
     serve(
         {
             fetch: app.fetch,
@@ -258,6 +289,7 @@ async function main() {
 
     G_ProviderConfig.baseUrl = cli.url ?? process.env.MOCK_OLLAMA_BASE_URL ?? "";
     G_ProviderConfig.apikey = cli.apikey ?? process.env.MOCK_OLLAMA_API_KEY ?? "";
+    Utils.mergeProviderPresetMap(PROVIDER_PRESET_MAP, cli.providerPreset ?? process.env.MOCK_OLLAMA_PROVIDER_PRESET);
 
     if (G_ProviderConfig.baseUrl.length === 0 || G_ProviderConfig.apikey.length === 0) {
         console.error("上游服务商配置错误，请检查命令行参数或环境变量");

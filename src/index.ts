@@ -8,10 +8,14 @@ import { Utils } from "./utils";
 // 加载环境变量
 loadEnv();
 
-type ProviderName = "bigmodel" | "anthropic" | "mock-anthropic" | "unknown";
+type ProviderName = "deepseek" | "zhipu" | "anthropic" | "mock-anthropic" | "unknown";
 type AgentApiConfig = {
     chat: string;
     tags: string;
+}
+type ProviderPreset = {
+    matchStr: string;
+    apiPath: AgentApiConfig;
 }
 type ProviderConfig = {
     name: ProviderName;
@@ -27,36 +31,41 @@ let G_ProviderConfig : ProviderConfig = {
     apiPath: null,
 }
 
-function processProviderName(baseUrl: string) {
-    if (baseUrl.includes("api.anthropic.com")) {
-        return "anthropic";
+const PROVIDER_PRESET_MAP: Record<Exclude<ProviderName, "unknown">, ProviderPreset> = {
+    "anthropic": {
+        matchStr: "api.anthropic.com",
+        apiPath: { chat: "/v1/messages", tags: "/models" },
+    },
+    "mock-anthropic": {
+        matchStr: "/anthropic",
+        apiPath: { chat: "/v1/messages", tags: "/v1/models" },
+    },
+    "zhipu": {
+        matchStr: "bigmodel.cn",
+        apiPath: { chat: "/chat/completions", tags: "/models" },
+    },
+    "deepseek": {
+        matchStr: "api.deepseek.com",
+        apiPath: { chat: "/chat/completions", tags: "/models" },
+    },
+};
+
+function processProviderName(baseUrl: string): ProviderName {
+    for (const [providerName, providerPreset] of Object.entries(PROVIDER_PRESET_MAP)) {
+        if (baseUrl.includes(providerPreset.matchStr)) {
+            return providerName as ProviderName;
+        }
     }
-    else if (baseUrl.includes("/anthropic")) {
-        return "mock-anthropic";
-    }
-    else if (baseUrl.includes("api.bigmodel.cn")) {
-        return "bigmodel";
-    }
-    else {
-        return "unknown";
-    }
+    return "unknown";
 }
 function processApiPath(providerName: ProviderName): AgentApiConfig | null {
-    switch (providerName) {
-        case "anthropic":
-            return { chat: "/v1/messages", tags: "/models" };
-        case "mock-anthropic":
-            return { chat: "/v1/messages", tags: "/v1/models" };
-        case "bigmodel":
-            return { chat: "/chat/completions", tags: "/v1/models" };
-        default:
-            return null;
-    }
+    return providerName === "unknown" ? null : PROVIDER_PRESET_MAP[providerName].apiPath;
 }
 
 function buildRequestHeaders(headers: HeadersInit) {
     const requestHeaders = new Headers(headers);
     requestHeaders.delete("authorization");
+    requestHeaders.delete("content-length");
     requestHeaders.set("Authorization", `Bearer ${G_ProviderConfig.apikey}`);
     requestHeaders.set("x-api-key", G_ProviderConfig.apikey); // anthropic 兼容接口
     return requestHeaders;
@@ -66,6 +75,74 @@ function buildResponseHeaders(headers: HeadersInit) {
     responseHeaders.delete("content-encoding");
     responseHeaders.delete("transfer-encoding");
     return responseHeaders;
+}
+async function readRequestBodyForLog(request: Request) {
+    const contentType = request.headers.get("content-type");
+    const rawText = await request.clone().text();
+    if (rawText.length === 0) {
+        return null;
+    }
+    return Utils.responseBodyForLog(rawText, contentType);
+}
+async function proxyChatRequest(c: any, routePath: string) {
+    const startTime = Date.now();
+    const body = await c.req.json();
+    const chooseModel = body.model ?? "unknown";
+
+    console.log(`[${Utils.timeNow()}] [请求] POST ${routePath} from model ${chooseModel}`);
+
+    try {
+        const realRequestUrl = `${G_ProviderConfig.baseUrl}${G_ProviderConfig.apiPath?.chat}`;
+        const headers = buildRequestHeaders(c.req.raw.headers);
+
+        Utils.dumpObject("发送请求", { url: realRequestUrl, method: "POST", headers: headers, body: body });
+        const res = await fetch(realRequestUrl, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(body),
+        });
+        console.log(`[${Utils.timeNow()}] [上游响应] status=${res.status}`);
+        const contentType = res.headers.get("content-type");
+        const responseHeaders = buildResponseHeaders(res.headers);
+
+        if (Utils.isSseContentType(contentType) && res.body) { // SSE 响应处理
+            const [clientBody, logBody] = res.body.tee();
+            void Utils.readStreamToText(logBody)
+                .then((rawText) => {
+                    Utils.dumpObject("请求回应", {
+                        status: res.status,
+                        headers: res.headers,
+                        body: Utils.responseBodyForLog(rawText, contentType),
+                    });
+                })
+                .catch((error) => {
+                    console.error(`[${Utils.timeNow()}] [错误] SSE 日志读取失败:`, error);
+                });
+
+            console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${Date.now() - startTime}ms)`);
+            return new Response(clientBody, {
+                status: res.status,
+                headers: responseHeaders,
+            });
+        }
+
+        // 非 SSE 响应处理
+        const rawText = await res.clone().text();
+        Utils.dumpObject("请求回应", {
+            status: res.status,
+            headers: res.headers,
+            body: Utils.responseBodyForLog(rawText, contentType),
+        });
+        console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${Date.now() - startTime}ms)`);
+        return new Response(res.body, {
+            status: res.status,
+            headers: responseHeaders,
+        });
+
+    } catch (e) {
+        console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
+        return c.json({ error: String(e) }, 500);
+    }
 }
 
 // 代理服务
@@ -116,65 +193,29 @@ app.get("/api/tags", async (c) => {
         return c.json({ error: String(e) }, 500);
     }
 });
+
+app.post("/chat/completions", async (c) => {
+    return proxyChatRequest(c, "/chat/completions");
+});
+app.post("/v1/chat/completions", async (c) => {
+    return proxyChatRequest(c, "/v1/chat/completions");
+});
 app.post("/v1/messages", async (c) => {
-    const startTime = Date.now();
-    const body = await c.req.json();
-    const chooseModel = body.model ?? "unknown";
-
-    console.log(`[${Utils.timeNow()}] [请求] POST /v1/messages from model ${chooseModel}`);
-
-    try {
-        const realRequestUrl = `${G_ProviderConfig.baseUrl}${G_ProviderConfig.apiPath?.chat}`;
-        const headers = buildRequestHeaders(c.req.raw.headers);
-        
-        Utils.dumpObject("发送请求", { url: realRequestUrl, method: "POST", headers: headers, body: body });
-        const res = await fetch(realRequestUrl, {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify(body),
-        });
-        console.log(`[${Utils.timeNow()}] [上游响应] status=${res.status}`);
-        const contentType = res.headers.get("content-type");
-        const responseHeaders = buildResponseHeaders(res.headers);
-
-        if (Utils.isSseContentType(contentType) && res.body) { // SSE 响应处理
-            const [clientBody, logBody] = res.body.tee();
-            void Utils.readStreamToText(logBody)
-                .then((rawText) => {
-                    Utils.dumpObject("请求回应", {
-                        status: res.status,
-                        headers: res.headers,
-                        body: Utils.responseBodyForLog(rawText, contentType),
-                    });
-                })
-                .catch((error) => {
-                    console.error(`[${Utils.timeNow()}] [错误] SSE 日志读取失败:`, error);
-                });
-
-            console.log(`[${Utils.timeNow()}] [响应] /v1/messages (耗时: ${Date.now() - startTime}ms)`);
-            return new Response(clientBody, {
-                status: res.status,
-                headers: responseHeaders,
-            });
-        }
-
-        // 非 SSE 响应处理
-        const rawText = await res.clone().text();
-        Utils.dumpObject("请求回应", {
-            status: res.status,
-            headers: res.headers,
-            body: Utils.responseBodyForLog(rawText, contentType),
-        });
-        console.log(`[${Utils.timeNow()}] [响应] /v1/messages (耗时: ${Date.now() - startTime}ms)`);
-        return new Response(res.body, {
-            status: res.status,
-            headers: responseHeaders,
-        });
-
-    } catch (e) {
-        console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
-        return c.json({ error: String(e) }, 500);
-    }
+    return proxyChatRequest(c, "/v1/messages");
+});
+app.all("*", async (c) => {
+    const requestInfo = {
+        method: c.req.method,
+        path: c.req.path,
+        query: c.req.query(),
+        headers: c.req.raw.headers,
+        body: await readRequestBodyForLog(c.req.raw),
+    };
+    Utils.dumpObject("收到兜底请求", requestInfo);
+    return c.json({
+        ok: false,
+        error: "收到未匹配路由请求",
+    }, 404);
 });
 
 // 主函数：解析参数并启动服务器

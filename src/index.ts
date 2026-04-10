@@ -1,12 +1,17 @@
+#!/usr/bin/env node
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { name } from "../package.json";
 import { Utils } from "./utils";
-// 加载环境变量
-loadEnv();
+
+// 从当前工作目录加载 .env（Node 20.12+ 内置，无额外依赖）
+if (existsSync(".env")) {
+    loadEnvFile();
+}
 
 type ProviderName = string;
 type AgentApiConfig = {

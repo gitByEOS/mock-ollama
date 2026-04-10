@@ -1,4 +1,5 @@
 # node项目开发学习笔记
+这是我的第一个npm项目，以下是作为新手的学习笔记
 
 ## 1. 项目初始化
 
@@ -52,7 +53,7 @@ npm test
 ### 3.1 安装依赖
 
 ```bash
-npm install hono @hono/node-server dotenv yargs
+npm install hono @hono/node-server yargs
 npm install -D typescript tsx @types/node @types/yargs
 ```
 
@@ -191,6 +192,7 @@ mock-ollama -h
 
 ## 5. 打包发布
 
+### 5.1 发布前准备工作
 如果你说的是发到 `npm`，就这几步。
 
 先本地确认可发：
@@ -242,3 +244,13 @@ npm run build
 npm publish
 ```
 
+### 5.2 修复二进制执行问题
+
+```diff
++++ b/src/index.ts
+@@ -1,3 +1,4 @@
++#!/usr/bin/env node
+
++++ b/package.json
++    "prepublishOnly": "npm run build"
+```

@@ -21,6 +21,14 @@
   "keywords": [],
   "author": "eos.",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitByEOS/mock-ollama.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gitByEOS/mock-ollama/issues"
+  },
+  "homepage": "https://github.com/gitByEOS/mock-ollama#readme",
   "type": "commonjs",
   "dependencies": {
     "@hono/node-server": "^1.19.13",

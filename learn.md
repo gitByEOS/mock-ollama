@@ -1,11 +1,13 @@
 # node项目开发学习笔记
+
 ## 1. 项目初始化
+
 - 创建项目文件夹
 - 初始化项目 `npm init -y`
 - 打开`package.json`文件，修改项目描述和作者信息，`type`改成`module`
 
-
 ## 2. 运行测试
+
 新建index.ts文件
 
 ```bash
@@ -40,18 +42,22 @@ console.log("=== 环境测试完成 ===");
 ```
 
 再当前目录执行，输出正常即可
+
 ```bash
 npm test
 ```
 
 ## 3. 最小测试模型
+
 ### 3.1 安装依赖
+
 ```bash
 npm install hono @hono/node-server dotenv yargs
 npm install -D typescript tsx @types/node @types/yargs
 ```
 
 ### 3.2 代码修改
+
 ```json
 // package.json 修改
 {
@@ -82,19 +88,24 @@ serve(
 ```
 
 ### 3.3 启动验证
+
 ```bash
 npm run dev
 curl http://localhost:11434/
 ```
 
-
 ## 4. 开启项目
+
 ### 4.1 生成tsconfig，引用项目配置
+
 生成一分默认的tsconfig.json
+
 ```bash
 npx tsc --init
 ```
+
 最小可用
+
 ```json
 {
   // Visit https://aka.ms/tsconfig to read more about this file
@@ -114,14 +125,18 @@ npx tsc --init
 }
 
 ```
-``` ts
+
+```ts
 import { version, name } from "../package.json";
 app.get("/api/version", (c) => c.json({ version: version, vendor: name }));
 ```
+
 ### 4.2 补充逻辑
 
 ### 4.3 编译成命令
+
 增加 npm build
+
 ```json
 // package.json 修改
 {
@@ -134,6 +149,7 @@ app.get("/api/version", (c) => c.json({ version: version, vendor: name }));
 ```
 
 新建make-cli脚本
+
 ```ts
 // scripts/make-cli.ts
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -158,6 +174,7 @@ console.log(`已生成可执行 CLI: ${distPath}`);
 ```
 
 开始构建并测试
+
 ```bash
 npm run build
 npm run start
@@ -166,11 +183,14 @@ npx mock-ollama -h
 ```
 
 全局关联
+
 ```bash
 npm link
 mock-ollama -h
 ```
+
 ## 5. 打包发布
+
 如果你说的是发到 `npm`，就这几步。
 
 先本地确认可发：
@@ -184,14 +204,7 @@ npm pack --dry-run
 
 ```bash
 npm login
-npm publish
-```
-
-以后每次更新版本再发：
-
-```bash
-npm version patch
-npm run build
+npm whoami
 npm publish
 ```
 
@@ -208,3 +221,24 @@ npm publish
   ]
 }
 ```
+
+报错的话，新账号需要给账号开`2FA`安全认证
+
+查看是否真正发布成功：
+
+```bash
+npm view mock-ollama version
+```
+
+对应网址：
+
+[https://www.npmjs.com/package/mock-ollama](https://www.npmjs.com/package/mock-ollama)
+
+以后每次更新版本再发：
+
+```bash
+npm version patch
+npm run build
+npm publish
+```
+

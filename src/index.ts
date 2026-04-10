@@ -157,7 +157,7 @@ app.post("/api/show", async (c) => {
         const modelInfo = {
             model_info: {
                 "general.architecture": model,
-                [`${model}.context_length`]: 262144, // 256k
+                [`${model}.context_length`]: 200_000, // 200k
             },
             "capabilities":["completion", "vision", "tools", "thinking"],
         }
@@ -290,7 +290,7 @@ async function main() {
             .parse();
     const port = cli.port ?? 11434;
     const host = cli.host ?? "localhost";
-    Utils.setObjectDumpQuiet(cli.quiet);
+    Utils.setObjectDumpQuiet(cli.quiet ?? false);
     serve(
         {
             fetch: app.fetch,

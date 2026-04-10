@@ -41,10 +41,10 @@ const PROVIDER_PRESET_MAP: ProviderPresetMap = {
         matchStr: "/anthropic",
         apiPath: { chat: "/v1/messages", tags: "/v1/models" },
     },
-    // "zhipu": {
-    //     matchStr: "bigmodel.cn",
-    //     apiPath: { chat: "/chat/completions", tags: "/models" },
-    // },
+    "zhipu": {
+        matchStr: "bigmodel.cn",
+        apiPath: { chat: "/chat/completions", tags: "/models" },
+    },
     "deepseek": {
         matchStr: "api.deepseek.com",
         apiPath: { chat: "/chat/completions", tags: "/models" },
@@ -150,6 +150,23 @@ async function proxyChatRequest(c: any, routePath: string) {
 const app = new Hono();
 app.get("/", (c) => c.text("ok"));
 app.get("/api/version", (c) => c.json({ version: "0.18.2", from: name }));
+app.post("/api/show", async (c) => {
+    try {
+        const body = await c.req.json();
+        const model = body.model ?? body.name ?? "unknown";
+        const modelInfo = {
+            model_info: {
+                "general.architecture": model,
+                [`${model}.context_length`]: 262144, // 256k
+            },
+            "capabilities":["completion", "vision", "tools", "thinking"],
+        }
+        return c.json(modelInfo);
+    } catch (e) {
+        console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
+        return c.json({ error: String(e) }, 500);
+    }
+});
 
 app.get("/api/tags", async (c) => {
     // 从配置中获取 tags 端点路径
@@ -267,14 +284,13 @@ async function main() {
             })
             .option("quiet", {
                 type: "boolean",
-                description: "安静模式，或者 export MOCK_OLLAMA_QUIET=1",
+                description: "安静模式",
             })
             .epilog(providerPresetDemo)
             .parse();
     const port = cli.port ?? 11434;
     const host = cli.host ?? "localhost";
-    const isQuiet = cli.quiet ?? process.env.MOCK_OLLAMA_QUIET === "1";
-    Utils.setObjectDumpQuiet(isQuiet);
+    Utils.setObjectDumpQuiet(cli.quiet);
     serve(
         {
             fetch: app.fetch,

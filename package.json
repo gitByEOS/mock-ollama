@@ -11,6 +11,13 @@
   "bin": {
     "mock-ollama": "./dist/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "keywords": [],
   "author": "eos.",
   "license": "ISC",

@@ -170,3 +170,41 @@ npx mock-ollama -h
 npm link
 mock-ollama -h
 ```
+## 5. 打包发布
+如果你说的是发到 `npm`，就这几步。
+
+先本地确认可发：
+
+```bash
+npm run build
+npm pack --dry-run
+```
+
+然后登录并发布：
+
+```bash
+npm login
+npm publish
+```
+
+以后每次更新版本再发：
+
+```bash
+npm version patch
+npm run build
+npm publish
+```
+
+最小建议配置：
+
+```json
+{
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
+```

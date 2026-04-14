@@ -54,6 +54,10 @@ const PROVIDER_PRESET_MAP: ProviderPresetMap = {
         matchStr: "api.deepseek.com",
         apiPath: { chat: "/chat/completions", tags: "/models" },
     },
+     "BaiLian": {
+        matchStr: "dashscope.aliyuncs.com",
+        apiPath: { chat: "/chat/completions", tags: "/models" },
+    },
 };
 
 function processProviderName(baseUrl: string): ProviderName {
@@ -249,7 +253,7 @@ async function main() {
 `export MOCK_OLLAMA_API_KEY="your-api-key"`,
 `export MOCK_OLLAMA_PROVIDER_PRESET='{
     "my-glm": {
-            "matchStr": "bigmodel.cn",
+        "matchStr": "bigmodel.cn",
             "apiPath": {
             "chat": "/chat/completions",
             "tags": "/models"
@@ -259,7 +263,7 @@ async function main() {
     "\n请求示例:",
     `1. curl http://localhost:11434/api/version`,
     `2. curl http://localhost:11434/api/tags`,
-    `3. curl -X POST http://localhost:11434/chat/completions -H "Content-Type: application/json" -d '{"model": "glm-4.7-flash", "messages": [{"role": "user", "content": "你是谁？"}]}'`,
+    `3. curl -X POST http://localhost:11434/chat/completions -H "Content-Type: application/json" -d '{"model": "glm-4.7", "messages": [{"role": "user", "content": "你是谁？"}]}'`,
     ].join("\n");
     const cli = await yargs(hideBin(process.argv))
             .usage('Usage: mock-ollama [command] <options>') 

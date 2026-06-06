@@ -1,12 +1,27 @@
 #!/usr/bin/env node
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { loadEnvFile } from "node:process";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { name } from "../package.json";
 import { Utils } from "./utils";
+
+// SSE 客户端管理
+const sseClients = new Set<{ write: (data: string) => void }>();
+
+function broadcastToSseClients(event: string, data: unknown) {
+    const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+        try {
+            client.write(message);
+        } catch {
+            sseClients.delete(client);
+        }
+    }
+}
 
 // 从当前工作目录加载 .env（Node 20.12+ 内置，无额外依赖）
 if (existsSync(".env")) {
@@ -28,6 +43,45 @@ type ProviderConfig = {
     baseUrl: string;
     apikey: string;
     apiPath: AgentApiConfig | null;
+}
+
+type LogEntry = {
+    id: number;
+    time: string;
+    method: string;
+    path: string;
+    model?: string;
+    duration?: number;
+    status?: number;
+    error?: string;
+    request?: unknown;
+    response?: unknown;
+}
+
+type RequestLogContext = {
+    id: number;
+    startTime: number;
+    model?: string;
+}
+
+// 内存日志存储（环形缓冲区，保留最近 200 条）
+const MAX_LOG_ENTRIES = 200;
+const logEntries: LogEntry[] = [];
+let logIdCounter = 0;
+
+function addLogEntry(entry: Omit<LogEntry, 'id'>): LogEntry {
+    const fullEntry: LogEntry = { ...entry, id: ++logIdCounter };
+    logEntries.push(fullEntry);
+    if (logEntries.length > MAX_LOG_ENTRIES) {
+        logEntries.shift();
+    }
+    // SSE 推送新日志
+    broadcastToSseClients('new-log', fullEntry);
+    return fullEntry;
+}
+
+function getLogEntries(limit: number = 100): LogEntry[] {
+    return logEntries.slice(-limit);
 }
 
 let G_ProviderConfig : ProviderConfig = {
@@ -96,10 +150,13 @@ async function readRequestBodyForLog(request: Request) {
 }
 async function proxyChatRequest(c: any, routePath: string) {
     const startTime = Date.now();
+    const timeNow = Utils.timeNow();
     const body = await c.req.json();
     const chooseModel = body.model ?? "unknown";
 
-    console.log(`[${Utils.timeNow()}] [请求] POST ${routePath} from model ${chooseModel}`);
+    console.log(`[${timeNow}] [请求] POST ${routePath} from model ${chooseModel}`);
+
+    const logCtx: RequestLogContext = { id: logIdCounter + 1, startTime, model: chooseModel };
 
     try {
         const realRequestUrl = `${G_ProviderConfig.baseUrl}${G_ProviderConfig.apiPath?.chat}`;
@@ -117,19 +174,42 @@ async function proxyChatRequest(c: any, routePath: string) {
 
         if (Utils.isSseContentType(contentType) && res.body) { // SSE 响应处理
             const [clientBody, logBody] = res.body.tee();
+            const duration = Date.now() - startTime;
+
             void Utils.readStreamToText(logBody)
                 .then((rawText) => {
+                    const responseBody = Utils.responseBodyForLog(rawText, contentType);
                     Utils.dumpObject("请求回应", {
                         status: res.status,
                         headers: res.headers,
-                        body: Utils.responseBodyForLog(rawText, contentType),
+                        body: responseBody,
+                    });
+                    addLogEntry({
+                        time: timeNow,
+                        method: "POST",
+                        path: routePath,
+                        model: chooseModel,
+                        duration,
+                        status: res.status,
+                        request: { model: chooseModel, messages: body.messages },
+                        response: responseBody,
                     });
                 })
                 .catch((error) => {
                     console.error(`[${Utils.timeNow()}] [错误] SSE 日志读取失败:`, error);
+                    addLogEntry({
+                        time: timeNow,
+                        method: "POST",
+                        path: routePath,
+                        model: chooseModel,
+                        duration: Date.now() - startTime,
+                        status: res.status,
+                        request: { model: chooseModel, messages: body.messages },
+                        error: String(error),
+                    });
                 });
 
-            console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${Date.now() - startTime}ms)`);
+            console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${duration}ms)`);
             return new Response(clientBody, {
                 status: res.status,
                 headers: responseHeaders,
@@ -138,27 +218,122 @@ async function proxyChatRequest(c: any, routePath: string) {
 
         // 非 SSE 响应处理
         const rawText = await res.clone().text();
+        const responseBody = Utils.responseBodyForLog(rawText, contentType);
+        const duration = Date.now() - startTime;
         Utils.dumpObject("请求回应", {
             status: res.status,
             headers: res.headers,
-            body: Utils.responseBodyForLog(rawText, contentType),
+            body: responseBody,
         });
-        console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${Date.now() - startTime}ms)`);
+        console.log(`[${Utils.timeNow()}] [响应] ${routePath} (耗时: ${duration}ms)`);
+
+        addLogEntry({
+            time: timeNow,
+            method: "POST",
+            path: routePath,
+            model: chooseModel,
+            duration,
+            status: res.status,
+            request: { model: chooseModel, messages: body.messages },
+            response: responseBody,
+        });
+
         return new Response(res.body, {
             status: res.status,
             headers: responseHeaders,
         });
 
     } catch (e) {
+        const duration = Date.now() - startTime;
         console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
+        addLogEntry({
+            time: timeNow,
+            method: "POST",
+            path: routePath,
+            model: chooseModel,
+            duration,
+            status: 500,
+            request: { model: chooseModel, messages: body.messages },
+            error: String(e),
+        });
         return c.json({ error: String(e) }, 500);
+    }
+}
+
+// HTML 页面路径（每次请求时动态读取，方便开发调试）
+const pageHtmlPath = join(__dirname, "page.html");
+function getPageHtml(): string {
+    try {
+        return readFileSync(pageHtmlPath, "utf-8");
+    } catch (e) {
+        console.error(`无法读取页面文件: ${pageHtmlPath}`);
+        return "<html><body><h1>页面加载失败</h1></body></html>";
     }
 }
 
 // 代理服务
 const app = new Hono();
-app.get("/", (c) => c.text("ok"));
+app.get("/", (c) => c.html(getPageHtml()));
 app.get("/api/version", (c) => c.json({ version: "0.18.2", from: name }));
+
+// 获取服务配置信息（供前端页面使用）
+app.get("/api/info", (c) => c.json({
+    provider: G_ProviderConfig.name,
+    baseUrl: G_ProviderConfig.baseUrl,
+    apiKeyMasked: Utils.maskSecret(G_ProviderConfig.apikey),
+}));
+
+// 获取请求日志
+app.get("/api/logs", (c) => {
+    const limit = parseInt(c.req.query("limit") || "100", 10);
+    return c.json(getLogEntries(limit));
+});
+
+// 清空日志
+app.delete("/api/logs", (c) => {
+    logEntries.length = 0;
+    logIdCounter = 0;
+    // SSE 推送清空通知
+    broadcastToSseClients('clear-logs', { ok: true });
+    return c.json({ ok: true, message: "日志已清空" });
+});
+
+// SSE 实时推送日志
+app.get("/api/logs/stream", (c) => {
+    const stream = new ReadableStream({
+        start(controller) {
+            const encoder = new TextEncoder();
+            const client = {
+                write: (data: string) => {
+                    try {
+                        controller.enqueue(encoder.encode(data));
+                    } catch {
+                        sseClients.delete(client);
+                    }
+                }
+            };
+            sseClients.add(client);
+
+            // 发送初始连接成功消息
+            controller.enqueue(encoder.encode(': connected\n\n'));
+        },
+        cancel() {
+            // 客户端断开时清理
+            for (const client of sseClients) {
+                sseClients.delete(client);
+            }
+        }
+    });
+
+    return new Response(stream, {
+        headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        },
+    });
+});
+
 app.post("/api/show", async (c) => {
     try {
         const body = await c.req.json();
@@ -180,12 +355,13 @@ app.post("/api/show", async (c) => {
 app.get("/api/tags", async (c) => {
     // 从配置中获取 tags 端点路径
     const startTime = Date.now();
+    const timeNow = Utils.timeNow();
     const headers = new Headers({
         "Authorization": `Bearer ${G_ProviderConfig.apikey}`,
         "Content-Type": "application/json",
     });
     try {
-        console.log(`[${Utils.timeNow()}] [请求] GET /api/tags`);
+        console.log(`[${timeNow}] [请求] GET /api/tags`);
         const realRequestUrl = `${G_ProviderConfig.baseUrl}${G_ProviderConfig.apiPath?.tags}`;
         Utils.dumpObject("发送请求", { url: realRequestUrl, method: "GET", headers: headers});
 
@@ -196,8 +372,10 @@ app.get("/api/tags", async (c) => {
         console.log(`[${Utils.timeNow()}] [上游响应] status=${res.status}`);
 
         const models: { name: string; model: string }[] = [];
+        let responseBody: unknown = null;
         if (res.ok) {
             const data = await res.json();
+            responseBody = data;
             Utils.dumpObject("请求回应", { status: res.status, headers: res.headers, body: data });
             // OpenAI 格式: data.data = [{id: "model-name"}]
             // Anthropic 格式: data.models = [{id: "model-name"}]
@@ -212,11 +390,29 @@ app.get("/api/tags", async (c) => {
                 }
             }
         }
-        console.log(`[${Utils.timeNow()}] [响应] /api/tags (耗时: ${Date.now() - startTime}ms)`);
+        const duration = Date.now() - startTime;
+        console.log(`[${Utils.timeNow()}] [响应] /api/tags (耗时: ${duration}ms)`);
+        addLogEntry({
+            time: timeNow,
+            method: "GET",
+            path: "/api/tags",
+            duration,
+            status: res.status,
+            response: responseBody ?? { models: models },
+        });
         return c.json({ models: models });
 
     } catch (e) {
+        const duration = Date.now() - startTime;
         console.error(`[${Utils.timeNow()}] [错误] 请求发生异常:`, e);
+        addLogEntry({
+            time: timeNow,
+            method: "GET",
+            path: "/api/tags",
+            duration,
+            status: 500,
+            error: String(e),
+        });
         return c.json({ error: String(e) }, 500);
     }
 });

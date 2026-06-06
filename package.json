@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && tsx scripts/make-cli.ts",
+    "build": "tsc && tsx scripts/make-cli.ts && cp src/page.html dist/page.html",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build"
   },

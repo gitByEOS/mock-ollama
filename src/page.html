@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mock-ollama</title>
+<script src="https://unpkg.com/gpt-tokenizer/dist/cl100k_base.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+  background: #0f0f0f;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+/* 顶部栏 */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+  position: relative;
+  display: inline-block;
+  padding: 12px 20px;
+  /* 立体投影：多层递进 */
+  text-shadow:
+    /* 光晕层 */
+    0 0 10px rgba(255,255,255,0.3),
+    0 0 20px rgba(255,255,255,0.2),
+    /* 立体阴影层 */
+    1px 1px 0 #333,
+    2px 2px 0 #2a2a2a,
+    3px 3px 0 #1a1a1a,
+    4px 4px 0 #0a0a0a,
+    5px 5px 10px rgba(0,0,0,0.6);
+}
+
+/* 黑色线框层 */
+.logo::before {
+  content: 'mock-ollama';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: transparent;
+  -webkit-text-stroke: 1px #1a1a1a;
+  z-index: -1;
+}
+
+/* 白色轮廓层 */
+.logo::after {
+  content: 'mock-ollama';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: transparent;
+  -webkit-text-stroke: 0.5px rgba(255,255,255,0.2);
+  z-index: -1;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #888;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #059669;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.header-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: transparent;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn:hover { border-color: #555; color: #fff; }
+.btn.active {
+  position: relative;
+  border: 1px solid #2a2a2a;
+  background: rgba(5,150,105,0.08);
+  color: #fff;
+}
+.btn.active::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 9px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Crect width='100%25' height='100%25' rx='8' ry='8' fill='none' stroke='%23059669' stroke-width='1.5' stroke-dasharray='30 170' stroke-dashoffset='0'/%3E%3C/svg%3E");
+  animation: snake-border 3s linear infinite;
+}
+@keyframes snake-border { to { background-position: 200px 0; } }
+
+/* 备用方案：用 SVG 内嵌实现更精确的动画 */
+.btn.active-snake {
+  position: relative;
+  border: 1px solid #3a3a3a;
+  background: #1a1a1a;
+  color: #fff;
+}
+.snake-border-svg {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px rgba(255,255,255,0.9))
+          drop-shadow(0 0 6px rgba(255,255,255,0.5))
+          drop-shadow(0 0 12px rgba(255,255,255,0.3));
+}
+.snake-border-svg rect {
+  fill: none;
+  stroke: rgba(255,255,255,0.95);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 20 180;
+  animation: snake-run 2s linear infinite;
+}
+@keyframes snake-run { to { stroke-dashoffset: -200; } }
+
+/* 主内容区 */
+.main {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-label {
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+/* 日志卡片 */
+.log-card {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.log-card:hover { border-color: #3a3a3a; }
+.log-card.expanded { border-color: #059669; }
+
+.log-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 16px;
+  line-height: 1;
+}
+
+.log-time {
+  font-size: 12px;
+  color: #666;
+  font-family: 'SF Mono', monospace;
+  width: 160px;
+  line-height: 1;
+}
+
+.log-method {
+  font-size: 13px;
+  font-weight: 600;
+  color: #059669;
+  width: 50px;
+  line-height: 1;
+}
+
+.log-method.POST { color: #2563eb; }
+
+.log-path {
+  font-size: 13px;
+  color: #e0e0e0;
+  font-family: 'SF Mono', monospace;
+  line-height: 1;
+}
+
+.log-status {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'SF Mono', monospace;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  min-height: 18px;
+}
+
+.log-status.success { background: rgba(5,150,105,0.2); color: #059669; }
+.log-status.error { background: rgba(220,38,38,0.2); color: #dc2626; }
+
+.log-duration {
+  font-size: 12px;
+  color: #d97706;
+  font-family: 'SF Mono', monospace;
+  width: 80px;
+  text-align: right;
+  line-height: 1;
+}
+
+.log-expand-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.log-expand-btn:hover {
+  border-color: #059669;
+  color: #059669;
+}
+
+.log-card.expanded .log-expand-btn {
+  background: rgba(5,150,105,0.1);
+  border-color: #059669;
+  color: #059669;
+}
+
+/* 横向上下文分布条 - 类似 /context */
+.dist-bar-wrap {
+  padding: 12px 16px;
+  background: #0f0f0f;
+}
+
+.dist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.dist-model {
+  font-size: 14px;
+  color: #888;
+}
+
+.dist-total {
+  font-size: 14px;
+  color: #888;
+  font-family: 'SF Mono', monospace;
+}
+
+.dist-bar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dist-bar {
+  display: flex;
+  height: 24px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+
+.dist-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  min-width: 20px;
+  transition: all 0.3s;
+}
+
+.seg-inner {
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+/* 分隔标记 */
+.dist-seg.has-border::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 1px;
+  background: rgba(255,255,255,0.3);
+}
+
+/* 请求段颜色 - 类似 /context */
+.seg-system      { background: #9ca3af; }
+.seg-memory      { background: #7c3aed; }
+.seg-skills      { background: #d97706; }
+.seg-messages    { background: #2563eb; }
+.seg-user        { background: #2563eb; }
+.seg-assistant   { background: #7c3aed; }
+
+/* 响应段颜色 */
+.seg-thinking    { background: #7c3aed; }
+.seg-text        { background: #059669; }
+.seg-free        { background: #333; }
+.seg-error       { background: #dc2626; }
+.seg-cache       { background: #0891b2; }
+
+/* Cache 样式 */
+.dist-cat-cache { background: rgba(8,145,178,0.1); border-radius: 6px; padding: 4px 0; }
+.dist-cat-value.cache { color: #0891b2; }
+
+/* 分类列表 - 类似 /context */
+.dist-categories {
+  margin-top: 12px;
+}
+
+.dist-category {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.dist-cat-bar {
+  display: flex;
+  height: 16px;
+  width: 200px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #1a1a1a;
+}
+
+.dist-cat-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.dist-cat-label {
+  color: #888;
+  min-width: 100px;
+}
+
+.dist-cat-value {
+  color: #666;
+  font-family: 'SF Mono', monospace;
+}
+
+.dist-cat-value.highlight { color: #e0e0e0; }
+.dist-cat-value.green { color: #059669; }
+.dist-cat-value.orange { color: #d97706; }
+.dist-cat-value.blue { color: #2563eb; }
+.dist-cat-value.purple { color: #7c3aed; }
+
+/* 详情展开区 */
+.log-detail {
+  display: none;
+  padding: 0 16px 16px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.log-card.expanded .log-detail { display: block; }
+
+/* 视图切换 */
+.view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.view-btn {
+  padding: 4px 12px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.view-btn:hover { border-color: #555; color: #888; }
+.view-btn.active { border-color: #059669; color: #059669; background: rgba(5,150,105,0.1); }
+
+.detail-section {
+  margin-top: 12px;
+}
+
+.detail-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.detail-json {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e0e0e0;
+  background: #0f0f0f;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  overflow-x: hidden;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.detail-error {
+  padding: 12px;
+  background: rgba(220,38,38,0.1);
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+/* 友好视图 */
+.friendly-view {
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.friendly-section {
+  margin-bottom: 16px;
+}
+
+.friendly-title {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.friendly-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.friendly-label {
+  color: #666;
+  min-width: 80px;
+}
+
+.friendly-value {
+  color: #e0e0e0;
+}
+
+.friendly-value.highlight { color: #059669; }
+.friendly-value.orange { color: #d97706; }
+.friendly-value.blue { color: #2563eb; }
+.friendly-value.purple { color: #7c3aed; }
+
+.message-block {
+  background: #0f0f0f;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.message-role {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.message-content {
+  font-size: 13px;
+  color: #e0e0e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thinking-block {
+  background: rgba(124,58,237,0.1);
+  border: 1px solid rgba(124,58,237,0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.thinking-label {
+  font-size: 11px;
+  color: #7c3aed;
+  margin-bottom: 4px;
+}
+
+.response-block {
+  background: rgba(5,150,105,0.1);
+  border: 1px solid rgba(5,150,105,0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.response-label {
+  font-size: 11px;
+  color: #059669;
+  margin-bottom: 4px;
+}
+
+/* Token 分布详情 */
+.token-stats {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.token-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.token-stat-label {
+  font-size: 11px;
+  color: #666;
+}
+
+.token-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'SF Mono', monospace;
+}
+
+.token-stat-value.blue { color: #2563eb; }
+.token-stat-value.green { color: #059669; }
+.token-stat-value.orange { color: #d97706; }
+.token-stat-value.purple { color: #7c3aed; }
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: #1a1a1a;
+  border-radius: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #888;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  color: #555;
+}
+
+.empty-text { font-size: 14px; color: #555; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0f0f0f; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+/* 右侧滑出面板 */
+.slide-panel {
+  position: fixed;
+  top: 0;
+  right: -600px;
+  width: 600px;
+  height: 100vh;
+  background: #1a1a1a;
+  border-left: 1px solid #2a2a2a;
+  z-index: 1000;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-panel.open { right: 0; }
+body.panel-open { overflow: hidden; }
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: transparent;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.panel-close:hover { border-color: #555; color: #fff; }
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+}
+
+.panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  z-index: 999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s;
+}
+
+.panel-overlay.open { opacity: 1; visibility: visible; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">mock-ollama</div>
+    <div class="status-badge">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">已连接</span>
+    </div>
+  </div>
+  <div class="header-controls">
+    <button class="btn active-snake" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+      <svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0.5" y="0.5" width="99" height="99" rx="8"/></svg>
+      实时推送
+    </button>
+    <button class="btn" id="clearBtn" onclick="confirmClear()">清空</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#9ca3af"></div>System</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Assistant</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div>User</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#059669"></div>Response</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#333"></div>Free</div>
+  </div>
+
+  <div class="section-label">请求日志</div>
+
+  <div id="logContainer">
+    <div class="empty-state">
+      <div class="empty-text">等待请求...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 右侧滑出面板 -->
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
+<div class="slide-panel" id="slidePanel">
+  <div class="panel-header">
+    <div class="panel-title" id="panelTitle">详情</div>
+    <button class="panel-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<script>
+let autoRefreshEnabled = true;
+let sseConnection = null;
+let expandedLogId = null;
+let viewModes = {}; // 存储每条日志的视图模式: 'friendly' 或 'raw'
+
+document.addEventListener('DOMContentLoaded', async () => {
+  fetchLogs(); // 初始加载
+  startSseConnection();
+});
+
+function startSseConnection() {
+  if (sseConnection) return;
+
+  sseConnection = new EventSource('/api/logs/stream');
+  updateStatus(true);
+
+  sseConnection.addEventListener('new-log', (e) => {
+    try {
+      const newLog = JSON.parse(e.data);
+      // 追加到当前日志列表
+      if (!window.currentLogs) window.currentLogs = [];
+      window.currentLogs.push(newLog);
+      // 限制显示数量
+      if (window.currentLogs.length > 50) {
+        window.currentLogs = window.currentLogs.slice(-50);
+      }
+      renderLogs(window.currentLogs);
+    } catch (err) {
+      console.error('SSE new-log parse error:', err);
+    }
+  });
+
+  sseConnection.addEventListener('clear-logs', () => {
+    window.currentLogs = [];
+    expandedLogId = null;
+    viewModes = {};
+    renderLogs([]);
+  });
+
+  sseConnection.onerror = () => {
+    console.log('SSE connection error, will reconnect');
+    updateStatus(false, '重连中');
+    sseConnection.close();
+    sseConnection = null;
+    // 5秒后重连
+    setTimeout(() => {
+      if (autoRefreshEnabled) startSseConnection();
+    }, 5000);
+  };
+
+  updateAutoRefreshBtn();
+}
+
+function stopSseConnection() {
+  if (sseConnection) {
+    sseConnection.close();
+    sseConnection = null;
+  }
+  updateStatus(false);
+}
+
+function updateStatus(connected, text = null) {
+  const dot = document.getElementById('statusDot');
+  const label = document.getElementById('statusText');
+  if (connected) {
+    dot.style.background = '#059669';
+    label.textContent = text || '已连接';
+  } else {
+    dot.style.background = '#dc2626';
+    label.textContent = text || '已断开';
+  }
+}
+
+function updateAutoRefreshBtn() {
+  const btn = document.getElementById('autoRefreshBtn');
+  if (autoRefreshEnabled) {
+    btn.className = 'btn active-snake';
+    btn.innerHTML = `<svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0.5" y="0.5" width="99" height="99" rx="8"/></svg>实时推送`;
+  } else {
+    btn.className = 'btn';
+    btn.textContent = '开始推送';
+  }
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  if (autoRefreshEnabled) {
+    startSseConnection();
+    fetchLogs(); // 重新获取最新日志
+  } else {
+    stopSseConnection();
+  }
+  updateAutoRefreshBtn();
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  if (autoRefreshEnabled) {
+    startSseConnection();
+    fetchLogs(); // 重新获取最新日志
+  } else {
+    stopSseConnection();
+  }
+  updateAutoRefreshBtn();
+}
+
+async function fetchLogs() {
+  try {
+    const res = await fetch('/api/logs?limit=50');
+    if (res.ok) {
+      const logs = await res.json();
+      renderLogs(logs);
+    }
+  } catch (e) {
+    console.error('fetchLogs error:', e);
+  }
+}
+
+function confirmClear() {
+  if (confirm('确认清空所有日志？此操作不可撤销')) {
+    clearLogs();
+  }
+}
+
+async function clearLogs() {
+  try {
+    await fetch('/api/logs', { method: 'DELETE' });
+    expandedLogId = null;
+    viewModes = {};
+    fetchLogs();
+  } catch (e) {}
+}
+
+function toggleViewMode(logId, mode) {
+  viewModes[logId] = mode;
+  // 更新右侧面板内容
+  const panelBody = document.getElementById('panelBody');
+  if (panelBody) {
+    const log = window.currentLogs?.find(l => l.id === logId);
+    if (log) {
+      panelBody.innerHTML = renderDetailContent(log);
+    }
+  }
+}
+
+function parseSseResponse(response) {
+  if (!response || typeof response !== 'object') return null;
+  const stats = { textLen: 0, thinkingLen: 0, frameCount: 0, usage: null };
+  if (response.format === 'sse') {
+    stats.frameCount = response.frameCount || 0;
+    stats.textLen = response.assistantText?.length || 0;
+    stats.thinkingLen = response.thinking?.length || 0;
+    if (response.usage) stats.usage = response.usage;
+  }
+  return stats;
+}
+
+// 获取完整文本
+function getText(text) {
+  if (!text) return '';
+  return typeof text === 'string' ? text : JSON.stringify(text);
+}
+
+function buildDistBar(log) {
+  if (log.error) {
+    return `<div class="dist-bar-container">
+      <div class="dist-category">
+        <div class="dist-cat-label" style="color:#dc2626">错误</div>
+        <div class="dist-cat-value highlight" style="color:#dc2626">${escapeHtml(getText(log.error))}</div>
+      </div>
+    </div>`;
+  }
+
+  // 分析请求消息
+  const messages = log.request?.messages || [];
+  const userMsgs = messages.filter(m => m.role === 'user');
+  const assistantMsgs = messages.filter(m => m.role === 'assistant');
+  const systemMsgs = messages.filter(m => m.role === 'system');
+
+  // 精确计算 token 数量（使用 gpt-tokenizer）
+  const countTokens = (text) => {
+    const t = getText(text);
+    if (!t) return 0;
+    try {
+      return GPTTokenizer_cl100k_base.encode(t).length;
+    } catch {
+      return Math.ceil(t.length / 2);
+    }
+  };
+
+  const systemTokens = systemMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
+  const assistantTokens = assistantMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
+  const userTokens = userMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
+  const requestTotal = systemTokens + assistantTokens + userTokens;
+
+  // 分析响应
+  const sseStats = parseSseResponse(log.response);
+
+  // 精确计算响应 token
+  const thinkingTokens = countTokens(log.response?.thinking || '');
+  const textTokens = countTokens(log.response?.assistantText || '');
+  const responseTotal = thinkingTokens + textTokens;
+
+  // 获取内容
+  const lastUserContent = userMsgs.length > 0 ? getText(userMsgs[userMsgs.length - 1].content) : '';
+  const responseText = sseStats?.textLen > 0 ? getText(log.response.assistantText) : '';
+  const thinkingText = sseStats?.thinkingLen > 0 ? getText(log.response.thinking) : '';
+
+  // 估算总上下文（假设 200k 为上限）
+  const MAX_CONTEXT = 200000;
+  const totalTokens = requestTotal + responseTotal;
+  const freeTokens = MAX_CONTEXT - totalTokens;
+  const usedPct = Math.round((totalTokens / MAX_CONTEXT) * 100);
+
+  let html = '<div class="dist-bar-container">';
+
+  // 格式化函数
+  const fmtPct = (v) => v.toFixed(2);
+  const fmtTokens = (v) => v >= 1000 ? (v / 1000).toFixed(2) + 'k' : v.toString();
+
+  // 检测 cache tokens
+  const usage = sseStats?.usage || log.response?.usage;
+  const hasUsage = usage?.input_tokens !== undefined;
+  const cacheTokens = usage?.cache_read_input_tokens || 0;
+
+  // 总量计算：优先用真实 usage，避免重复计算
+  let totalInput;
+  if (hasUsage) {
+    totalInput = usage.input_tokens + cacheTokens;
+  } else {
+    totalInput = requestTotal;
+  }
+  const totalWithCache = totalInput + responseTotal;
+
+  // === 顶部概览 ===
+  const totalK = (totalWithCache / 1000).toFixed(2);
+  const freeK = ((MAX_CONTEXT - totalWithCache) / 1000).toFixed(2);
+  const usedPctWithCache = Math.round((totalWithCache / MAX_CONTEXT) * 100);
+  html += `<div class="dist-header">
+    <div class="dist-model">${log.request?.model || 'unknown'}</div>
+    <div class="dist-total">${totalK}k/${MAX_CONTEXT/1000}k tokens (${fmtPct(usedPctWithCache)}%)</div>
+  </div>`;
+
+  // === 横向总览条 ===
+  html += '<div class="dist-bar">';
+  const toPct = (v) => Math.round(v * 100) / 100;
+  const systemPct = toPct(Math.max(2, (systemTokens / MAX_CONTEXT) * 100));
+  const assistantPct = toPct(Math.max(0, (assistantTokens / MAX_CONTEXT) * 100));
+  const userPct = toPct(Math.max(0, (userTokens / MAX_CONTEXT) * 100));
+  const thinkingPct = toPct(Math.max(0, (thinkingTokens / MAX_CONTEXT) * 100));
+  const textPct = toPct(Math.max(0, (textTokens / MAX_CONTEXT) * 100));
+  const freePct = toPct(100 - systemPct - assistantPct - userPct - thinkingPct - textPct);
+
+  if (systemPct > 1) html += `<div class="dist-seg seg-system" style="width:${systemPct}%"></div>`;
+  if (assistantPct > 1) html += `<div class="dist-seg seg-assistant has-border" style="width:${assistantPct}%"></div>`;
+  if (userPct > 1) html += `<div class="dist-seg seg-user" style="width:${userPct}%"></div>`;
+  if (thinkingPct > 1) html += `<div class="dist-seg seg-thinking" style="width:${thinkingPct}%"></div>`;
+  if (textPct > 1) html += `<div class="dist-seg seg-text" style="width:${textPct}%"></div>`;
+  if (freePct > 1) html += `<div class="dist-seg seg-free" style="width:${freePct}%"></div>`;
+  html += '</div>';
+
+  // === 分类详情 ===
+  html += '<div class="dist-categories">';
+
+  // Messages 分组
+  const showMessages = systemTokens > 0 || assistantTokens > 0 || userTokens > 0;
+  if (showMessages) {
+    html += '<div class="dist-cat-label" style="margin-bottom:8px;color:#666">Messages</div>';
+  }
+
+  if (systemTokens > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">System</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-system" style="width:${Math.min(100, systemPct * 10)}%"></div></div>
+      <div class="dist-cat-value">${fmtTokens(systemTokens)} (${fmtPct(systemPct)}%)</div>
+    </div>`;
+  }
+
+  if (assistantTokens > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">Assistant</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-assistant" style="width:${Math.min(100, assistantPct * 10)}%"></div></div>
+      <div class="dist-cat-value purple">${fmtTokens(assistantTokens)} (${fmtPct(assistantPct)}%)</div>
+    </div>`;
+  }
+
+  if (userTokens > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">User</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${Math.min(100, userPct * 10)}%"></div></div>
+      <div class="dist-cat-value blue">${fmtTokens(userTokens)} (${fmtPct(userPct)}%)</div>
+    </div>`;
+  }
+
+  // Cache 和 Input 显示（如果有 cache）
+  if (cacheTokens > 0) {
+    const actualInput = hasUsage ? usage.input_tokens : requestTotal;
+    const totalInputWithCache = actualInput + cacheTokens;
+    const cachePct = (cacheTokens / totalInputWithCache) * 100;
+    const inputPct = (actualInput / totalInputWithCache) * 100;
+
+    html += `<div class="dist-category dist-cat-cache">
+      <div class="dist-cat-label">Cache</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${Math.min(100, cachePct)}%"></div></div>
+      <div class="dist-cat-value cache">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)</div>
+    </div>`;
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">Input</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${Math.min(100, inputPct)}%"></div></div>
+      <div class="dist-cat-value blue">${fmtTokens(actualInput)} (${fmtPct(inputPct)}%)</div>
+    </div>`;
+  }
+
+  // Output 分组
+  const showOutput = thinkingTokens > 0 || textTokens > 0;
+  if (showOutput) {
+    html += '<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Output</div>';
+  }
+
+  if (thinkingTokens > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">Thinking</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-thinking" style="width:${Math.min(100, thinkingPct * 10)}%"></div></div>
+      <div class="dist-cat-value purple">${fmtTokens(thinkingTokens)} (${fmtPct(thinkingPct)}%)</div>
+    </div>`;
+  }
+
+  if (textTokens > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">Response</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-text" style="width:${Math.min(100, textPct * 10)}%"></div></div>
+      <div class="dist-cat-value green">${fmtTokens(textTokens)} (${fmtPct(textPct)}%)</div>
+    </div>`;
+  }
+
+  // Free space
+  html += '<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Available</div>';
+  const freePctActual = 100 - usedPctWithCache;
+  html += `<div class="dist-category">
+    <div class="dist-cat-label">Free</div>
+    <div class="dist-cat-bar"><div class="dist-cat-fill seg-free" style="width:${Math.min(100, freePctActual)}%"></div></div>
+    <div class="dist-cat-value">${freeK}k (${fmtPct(freePctActual)}%)</div>
+  </div>`;
+
+  html += '</div>';
+
+  // === 实际内容展示 ===
+  if (lastUserContent) {
+    html += `<div class="dist-categories" style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a2a">
+      <div class="dist-category" style="flex-direction:column;align-items:flex-start">
+        <div class="dist-cat-label" style="color:#2563eb">User 最后输入</div>
+        <div class="message-content" style="font-size:13px;color:#e0e0e0;width:100%;white-space:pre-wrap">${escapeHtml(lastUserContent)}</div>
+      </div>`;
+    if (thinkingText) {
+      html += `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px">
+        <div class="dist-cat-label" style="color:#7c3aed">Thinking</div>
+        <div class="message-content" style="font-size:13px;color:#e0e0e0;width:100%;white-space:pre-wrap">${escapeHtml(thinkingText)}</div>
+      </div>`;
+    }
+    if (responseText) {
+      html += `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px">
+        <div class="dist-cat-label" style="color:#059669">Response</div>
+        <div class="message-content" style="font-size:13px;color:#e0e0e0;width:100%;white-space:pre-wrap">${escapeHtml(responseText)}</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // === 耗时信息 ===
+  html += `<div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a">
+    <div class="dist-category">
+      <div class="dist-cat-label">耗时</div>
+      <div class="dist-cat-value orange">${log.duration || '-'}ms</div>
+    </div>`;
+  if (sseStats?.frameCount > 0) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">SSE帧数</div>
+      <div class="dist-cat-value">${sseStats.frameCount}</div>
+    </div>`;
+  }
+  if (sseStats?.usage) {
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">实际Token</div>
+      <div class="dist-cat-value green">${JSON.stringify(sseStats.usage)}</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function renderFriendlyRequest(request) {
+  if (!request) return '';
+  let html = '<div class="friendly-section"><div class="friendly-title">请求详情</div>';
+
+  // 模型信息
+  if (request.model) {
+    html += `<div class="friendly-row"><div class="friendly-label">模型</div><div class="friendly-value blue">${request.model}</div></div>`;
+  }
+
+  // 消息列表（倒序，最新在上边）
+  if (request.messages && request.messages.length > 0) {
+    html += `<div class="friendly-row"><div class="friendly-label">消息数</div><div class="friendly-value">${request.messages.length} 条</div></div>`;
+    const reversedMsgs = [...request.messages].reverse();
+    reversedMsgs.forEach((msg, idx) => {
+      const role = msg.role || 'unknown';
+      const content = getText(msg.content);
+      const actualIdx = request.messages.length - idx;
+      html += `<div class="message-block">
+        <div class="message-role"><span>${role}</span><span style="float:right;color:#555">#${actualIdx}</span></div>
+        <div class="message-content">${escapeHtml(content)}</div>
+      </div>`;
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderFriendlyResponse(response) {
+  if (!response) return '';
+  let html = '<div class="friendly-section"><div class="friendly-title">响应详情</div>';
+
+  const sseStats = parseSseResponse(response);
+
+  if (sseStats && response.format === 'sse') {
+    // SSE 格式响应
+    html += `<div class="friendly-row"><div class="friendly-label">格式</div><div class="friendly-value">SSE 流式</div></div>`;
+    html += `<div class="friendly-row"><div class="friendly-label">帧数</div><div class="friendly-value">${sseStats.frameCount}</div></div>`;
+
+    if (response.message) {
+      html += `<div class="friendly-row"><div class="friendly-label">消息ID</div><div class="friendly-value">${response.message.id || '-'}</div></div>`;
+      if (response.message.model) {
+        html += `<div class="friendly-row"><div class="friendly-label">实际模型</div><div class="friendly-value blue">${response.message.model}</div></div>`;
+      }
+    }
+
+    if (sseStats.thinkingLen > 0) {
+      const thinking = getText(response.thinking);
+      html += `<div class="thinking-block">
+        <div class="thinking-label">思考过程 (${thinking.length} 字)</div>
+        <div class="message-content">${escapeHtml(thinking)}</div>
+      </div>`;
+    }
+
+    if (sseStats.textLen > 0) {
+      const text = getText(response.assistantText);
+      html += `<div class="response-block">
+        <div class="response-label">回复内容 (${text.length} 字)</div>
+        <div class="message-content">${escapeHtml(text)}</div>
+      </div>`;
+    }
+
+    if (response.stopReason) {
+      html += `<div class="friendly-row"><div class="friendly-label">停止原因</div><div class="friendly-value orange">${response.stopReason}</div></div>`;
+    }
+
+    if (sseStats.usage) {
+      html += `<div class="friendly-row"><div class="friendly-label">Token 使用</div><div class="friendly-value highlight">${JSON.stringify(sseStats.usage)}</div></div>`;
+    }
+
+  } else if (response.choices) {
+    // OpenAI 格式
+    html += `<div class="friendly-row"><div class="friendly-label">格式</div><div class="friendly-value">OpenAI</div></div>`;
+    for (const choice of response.choices) {
+      const content = getText(choice.message?.content || choice.delta?.content);
+      html += `<div class="response-block">
+        <div class="response-label">回复</div>
+        <div class="message-content">${escapeHtml(content)}</div>
+      </div>`;
+    }
+
+  } else if (response.content) {
+    // Anthropic 格式
+    html += `<div class="friendly-row"><div class="friendly-label">格式</div><div class="friendly-value">Anthropic</div></div>`;
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        html += `<div class="response-block">
+          <div class="response-label">文本回复</div>
+          <div class="message-content">${escapeHtml(getText(block.text))}</div>
+        </div>`;
+      } else if (block.type === 'thinking') {
+        html += `<div class="thinking-block">
+          <div class="thinking-label">思考过程</div>
+          <div class="message-content">${escapeHtml(getText(block.thinking))}</div>
+        </div>`;
+      }
+    }
+
+  } else if (response.models) {
+    // 模型列表
+    html += `<div class="friendly-row"><div class="friendly-label">格式</div><div class="friendly-value">模型列表</div></div>`;
+    html += `<div class="friendly-row"><div class="friendly-label">模型数</div><div class="friendly-value highlight">${response.models.length}</div></div>`;
+    const modelNames = response.models.map(m => m.name || m.id || m).join(', ');
+    html += `<div class="friendly-row"><div class="friendly-label">模型</div><div class="friendly-value">${escapeHtml(modelNames)}</div></div>`;
+
+  } else {
+    // 其他格式 - 显示关键字段
+    const keys = Object.keys(response).slice(0, 5);
+    for (const key of keys) {
+      const val = response[key];
+      const display = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      html += `<div class="friendly-row"><div class="friendly-label">${key}</div><div class="friendly-value">${escapeHtml(display)}</div></div>`;
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function renderDetailContent(log) {
+  const mode = viewModes[log.id] || 'friendly';
+  let html = '';
+
+  // 视图切换按钮
+  html += `<div class="view-toggle">
+    <button class="view-btn ${mode === 'friendly' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'friendly'); event.stopPropagation();">友好视图</button>
+    <button class="view-btn ${mode === 'raw' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'raw'); event.stopPropagation();">原始数据</button>
+  </div>`;
+
+  if (log.error) {
+    html += `<div class="detail-error">${log.error}</div>`;
+  }
+
+  if (mode === 'friendly') {
+    // 好友视图 - 响应在前，请求在后（倒序）
+    html += `<div class="friendly-view">`;
+    html += renderFriendlyResponse(log.response);
+    html += renderFriendlyRequest(log.request);
+    html += `</div>`;
+  } else {
+    // 原始数据视图 - 响应在前，请求在后（倒序）
+    if (log.response) {
+      html += `<div class="detail-section">
+        <div class="detail-label">响应</div>
+        <div class="detail-json">${escapeHtml(JSON.stringify(log.response, null, 2))}</div>
+      </div>`;
+    }
+    if (log.request) {
+      html += `<div class="detail-section">
+        <div class="detail-label">请求</div>
+        <div class="detail-json">${escapeHtml(JSON.stringify(log.request, null, 2))}</div>
+      </div>`;
+    }
+  }
+
+  return html;
+}
+
+function renderLogs(logs) {
+  window.currentLogs = logs; // 保存用于切换视图时查找
+  const container = document.getElementById('logContainer');
+
+  if (!logs || logs.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-text">等待请求...</div>
+      </div>
+    `;
+    return;
+  }
+
+  const reversed = [...logs].reverse();
+  let html = '';
+
+  for (const log of reversed) {
+    const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
+
+    html += `<div class="log-card">`;
+
+    // 头部信息
+    html += `<div class="log-header">
+      <div class="log-time">${log.time}</div>
+      <div class="log-method ${log.method}">${log.method}</div>
+      <div class="log-path">${log.path}</div>
+      <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
+      <div class="log-duration">${log.duration ? log.duration + 'ms' : '-'}</div>
+      <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
+    </div>`;
+
+    // 横向分布条
+    if (log.method === 'POST') {
+      try {
+        html += `<div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
+      } catch (e) {
+        console.error('buildDistBar error:', e);
+        html += `<div class="dist-bar-wrap"><div class="dist-header"><div class="dist-model">解析错误</div></div></div>`;
+      }
+    }
+
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function toggleDetail(logId) {
+  const log = window.currentLogs?.find(l => l.id === logId);
+  if (!log) return;
+
+  // 打开右侧面板，禁止主页面滚动
+  document.body.classList.add('panel-open');
+  document.getElementById('slidePanel').classList.add('open');
+  document.getElementById('panelOverlay').classList.add('open');
+  document.getElementById('panelTitle').textContent = `${log.method} ${log.path}`;
+
+  // 渲染详情内容
+  document.getElementById('panelBody').innerHTML = renderDetailContent(log);
+}
+
+function closePanel() {
+  document.body.classList.remove('panel-open');
+  document.getElementById('slidePanel').classList.remove('open');
+  document.getElementById('panelOverlay').classList.remove('open');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>

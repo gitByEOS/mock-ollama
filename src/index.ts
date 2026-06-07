@@ -33,11 +33,6 @@ type AgentApiConfig = {
     chat: string;
     tags: string;
 }
-type ProviderPreset = {
-    matchStr: string;
-    apiPath: AgentApiConfig;
-}
-type ProviderPresetMap = Record<string, ProviderPreset>;
 type ProviderConfig = {
     name: ProviderName;
     baseUrl: string;
@@ -91,39 +86,41 @@ let G_ProviderConfig : ProviderConfig = {
     apiPath: null,
 }
 
-const PROVIDER_PRESET_MAP: ProviderPresetMap = {
-    "anthropic": {
-        matchStr: "api.anthropic.com",
-        apiPath: { chat: "/v1/messages", tags: "/models" },
-    },
-    "mock-anthropic": {
-        matchStr: "/anthropic",
-        apiPath: { chat: "/v1/messages", tags: "/v1/models" },
-    },
-    "zhipu": {
-        matchStr: "bigmodel.cn",
-        apiPath: { chat: "/chat/completions", tags: "/models" },
-    },
-    "deepseek": {
-        matchStr: "api.deepseek.com",
-        apiPath: { chat: "/chat/completions", tags: "/models" },
-    },
-     "BaiLian": {
-        matchStr: "dashscope.aliyuncs.com",
-        apiPath: { chat: "/chat/completions", tags: "/models" },
-    },
-};
+// API 路径配置
+const ANTHROPIC_API_PATH: AgentApiConfig = { chat: "/v1/messages", tags: "/v1/models" };
+const OPENAI_API_PATH: AgentApiConfig = { chat: "/v1/chat/completions", tags: "/v1/models" };
+
+// Provider 名称匹配规则（matchStr → providerName）
+const PROVIDER_NAME_RULES: Array<{ matchStr: string; name: string }> = [
+    { matchStr: "anthropic.com", name: "anthropic" },
+    { matchStr: "bigmodel.cn", name: "zhipu" },
+    { matchStr: "deepseek.com", name: "deepseek" },
+    { matchStr: "moonshot.cn", name: "moonshot" },
+    { matchStr: "dashscope.aliyuncs.com", name: "aliyun" },
+    { matchStr: "siliconflow.cn", name: "siliconflow" },
+    { matchStr: "qianfan.baidubce.com", name: "baidu" },
+    { matchStr: "minimaxi.com", name: "minimax" },
+    { matchStr: "minimax.io", name: "minimax-global" },
+    { matchStr: "lingyiwanwu.com", name: "yi" },
+    { matchStr: "/anthropic", name: "anthropic" },
+];
 
 function processProviderName(baseUrl: string): ProviderName {
-    for (const [providerName, providerPreset] of Object.entries(PROVIDER_PRESET_MAP)) {
-        if (baseUrl.includes(providerPreset.matchStr)) {
-            return providerName as ProviderName;
+    for (const rule of PROVIDER_NAME_RULES) {
+        if (baseUrl.includes(rule.matchStr)) {
+            return rule.name;
         }
     }
     return "unknown";
 }
-function processApiPath(providerName: ProviderName): AgentApiConfig | null {
-    return PROVIDER_PRESET_MAP[providerName]?.apiPath ?? null;
+
+function processApiPath(baseUrl: string): AgentApiConfig {
+    // Anthropic 兼容
+    if (baseUrl.includes("anthropic") || baseUrl.includes("/anthropic")) {
+        return ANTHROPIC_API_PATH;
+    }
+    // 默认 OpenAI 兼容
+    return OPENAI_API_PATH;
 }
 
 function buildRequestHeaders(headers: HeadersInit) {
@@ -444,22 +441,15 @@ app.all("*", async (c) => {
 // 主函数：解析参数并启动服务器
 async function main() {
     const providerPresetDemo = [
-        "\n环境变量配置示例:",
-`export MOCK_OLLAMA_BASE_URL="https://open.bigmodel.cn/api/paas/v4"`,
-`export MOCK_OLLAMA_API_KEY="your-api-key"`,
-`export MOCK_OLLAMA_PROVIDER_PRESET='{
-    "my-glm": {
-        "matchStr": "bigmodel.cn",
-            "apiPath": {
-            "chat": "/chat/completions",
-            "tags": "/models"
-        }
-    }
-}'`,
-    "\n请求示例:",
-    `1. curl http://localhost:11434/api/version`,
-    `2. curl http://localhost:11434/api/tags`,
-    `3. curl -X POST http://localhost:11434/chat/completions -H "Content-Type: application/json" -d '{"model": "glm-4.7", "messages": [{"role": "user", "content": "你是谁？"}]}'`,
+        "\n命令行参数示例:",
+        `  mock-ollama --url "https://api.deepseek.com" --apikey "your-key"`,
+        `  mock-ollama --url "https://open.bigmodel.cn/api/paas/v4" --apikey "your-key" --port 8080`,
+        `  mock-ollama --url "https://api.anthropic.com" --apikey "your-key" --open`,
+        "\n启动后测试:",
+        `  curl http://localhost:11434/api/version`,
+        `  curl http://localhost:11434/api/tags`,
+        `  curl -X POST http://localhost:11434/chat/completions -H "Content-Type: application/json" -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"hi"}]}'`,
+        "\n访问 http://localhost:11434 查看日志页面",
     ].join("\n");
     const cli = await yargs(hideBin(process.argv))
             .usage('Usage: mock-ollama [command] <options>') 
@@ -483,13 +473,13 @@ async function main() {
                 type: "string",
                 description: "上游服务商 url，或者export MOCK_OLLAMA_BASE_URL",
             })
-            .option("provider-preset", {
-                type: "string",
-                description: "额外 provider JSON配置，或者 export MOCK_OLLAMA_PROVIDER_PRESET",
-            })
-            .option("quiet", {
+                        .option("quiet", {
                 type: "boolean",
                 description: "安静模式",
+            })
+            .option("open", {
+                type: "boolean",
+                description: "启动后自动打开浏览器",
             })
             .epilog(providerPresetDemo)
             .parse();
@@ -503,14 +493,28 @@ async function main() {
             port: port,
         },
         (info) => {
-            console.log(`模拟服务启动在 http://${info.address}:${info.port}`);
+            const displayUrl = `http://localhost:${info.port}`;
+            console.log(`服务启动: ${displayUrl}（浏览器打开获取更好体验）`);
+            if (cli.open) {
+                // macOS 用 open，Linux 用 xdg-open，Windows 会自动识别
+                const { execSync } = require("node:child_process");
+                try {
+                    execSync(`open "${displayUrl}"`, { stdio: "ignore" });
+                } catch {
+                    // Linux fallback
+                    try {
+                        execSync(`xdg-open "${displayUrl}"`, { stdio: "ignore" });
+                    } catch {
+                        console.log(`请手动打开浏览器访问 ${displayUrl}`);
+                    }
+                }
+            }
         },
     );
 
 
     G_ProviderConfig.baseUrl = cli.url ?? process.env.MOCK_OLLAMA_BASE_URL ?? "";
     G_ProviderConfig.apikey = cli.apikey ?? process.env.MOCK_OLLAMA_API_KEY ?? "";
-    Utils.mergeProviderPresetMap(PROVIDER_PRESET_MAP, cli.providerPreset ?? process.env.MOCK_OLLAMA_PROVIDER_PRESET);
 
     if (G_ProviderConfig.baseUrl.length === 0 || G_ProviderConfig.apikey.length === 0) {
         console.error("上游服务商配置错误，请检查命令行参数或环境变量");
@@ -525,7 +529,7 @@ async function main() {
     }
 
     G_ProviderConfig.name = processProviderName(G_ProviderConfig.baseUrl);
-    G_ProviderConfig.apiPath = processApiPath(G_ProviderConfig.name);
+    G_ProviderConfig.apiPath = processApiPath(G_ProviderConfig.baseUrl);
     console.log(`上游服务商配置:\n${G_ProviderConfig.name}, ${G_ProviderConfig.baseUrl}, ${Utils.maskSecret(G_ProviderConfig.apikey)}`);
     Utils.dumpObject("ApiPathConfig", G_ProviderConfig.apiPath);
 }

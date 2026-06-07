@@ -205,9 +205,12 @@ body {
   font-size: 12px;
   color: #666;
   font-family: 'SF Mono', monospace;
-  width: 160px;
+  white-space: nowrap;
   line-height: 1;
 }
+.log-time-date { color: #666; }
+.log-time-clock { color: #666; transition: color 0.3s ease; }
+.log-card:hover .log-time-clock { color: #e0e0e0; }
 
 .log-method {
   font-size: 13px;
@@ -215,6 +218,8 @@ body {
   color: #059669;
   width: 50px;
   line-height: 1;
+  margin-left: 8px;
+  text-align: center;
 }
 
 .log-method.POST { color: #2563eb; }
@@ -236,6 +241,7 @@ body {
   justify-content: center;
   line-height: 1;
   min-height: 18px;
+  margin-left: 16px;
 }
 
 .log-status.success { background: rgba(5,150,105,0.2); color: #059669; }
@@ -246,7 +252,7 @@ body {
   color: #d97706;
   font-family: 'SF Mono', monospace;
   width: 80px;
-  text-align: right;
+  text-align: center;
   line-height: 1;
 }
 
@@ -263,14 +269,14 @@ body {
 }
 
 .log-expand-btn:hover {
-  border-color: #059669;
-  color: #059669;
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 .log-card.expanded .log-expand-btn {
-  background: rgba(5,150,105,0.1);
-  border-color: #059669;
-  color: #059669;
+  background: rgba(37,99,235,0.1);
+  border-color: #2563eb;
+  color: #2563eb;
 }
 
 /* 横向上下文分布条 - 类似 /context */
@@ -355,7 +361,9 @@ body {
 
 /* Cache 样式 */
 .dist-cat-cache { background: rgba(8,145,178,0.1); border-radius: 6px; padding: 4px 0; }
+.dist-cat-cache-warning { background: rgba(220,38,38,0.15); border-radius: 6px; padding: 4px 0; border: 1px solid rgba(220,38,38,0.3); }
 .dist-cat-value.cache { color: #0891b2; }
+.dist-cat-value.cache-warning { color: #dc2626; }
 
 /* 分类列表 - 类似 /context */
 .dist-categories {
@@ -428,7 +436,7 @@ body {
 }
 
 .view-btn:hover { border-color: #555; color: #888; }
-.view-btn.active { border-color: #059669; color: #059669; background: rgba(5,150,105,0.1); }
+.view-btn.active { border-color: #2563eb; color: #2563eb; background: rgba(37,99,235,0.1); }
 
 .detail-section {
   margin-top: 12px;
@@ -690,6 +698,208 @@ body.panel-open { overflow: hidden; }
 }
 
 .panel-overlay.open { opacity: 1; visibility: visible; }
+
+/* Diff 对比视图 */
+.diff-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #0f0f0f;
+  display: none;
+  z-index: 1001;
+  flex-direction: column;
+  overscroll-behavior: contain;
+}
+.diff-container.open { display: flex; }
+
+.diff-header {
+  height: 48px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 16px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #2a2a2a;
+  position: relative;
+}
+
+.diff-header-left {
+  text-align: center;
+  font-size: 13px;
+  color: #888;
+}
+
+.diff-header-center {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.diff-header-right {
+  text-align: center;
+  font-size: 13px;
+  color: #888;
+  position: relative;
+}
+
+.diff-close-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 12px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
+}
+.diff-close-btn:hover { border-color: #555; color: #fff; }
+
+.diff-body {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Minimap 在中间 */
+.diff-minimap {
+  width: 60px;
+  background: #1a1a1a;
+  border-left: 1px solid #2a2a2a;
+  border-right: 1px solid #2a2a2a;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.diff-minimap:active { cursor: grabbing; }
+
+.diff-minimap-items {
+  position: absolute;
+  top: 8px;
+  left: 6px;
+  right: 6px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-minimap-item {
+  min-height: 6px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 4px;
+}
+
+.diff-minimap-same { background: rgba(60,60,60,0.4); }
+.diff-minimap-diff { background: #ef4444; border: 2px solid #f87171; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+.diff-minimap-added { background: #10b981; border: 2px solid #34d399; box-shadow: 0 0 8px rgba(16,185,129,0.6); }
+.diff-minimap-removed { background: #ef4444; border: 2px solid #f87171; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+
+.diff-minimap-item:hover { filter: brightness(1.5); }
+
+/* 视口指示器 */
+.diff-minimap-viewport {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 3px;
+  pointer-events: none;
+  transition: top 0.05s;
+}
+
+/* 主内容区域 */
+.diff-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.diff-panel {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  scrollbar-width: none;
+}
+.diff-panel::-webkit-scrollbar { display: none; }
+
+.diff-panel-left {
+  background: #1a1a1a;
+}
+
+.diff-panel-right {
+  background: #1a1a1a;
+}
+
+/* 删除 gutter */
+.diff-gutter { display: none; }
+
+/* 消息样式 */
+.diff-message {
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.diff-message-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.diff-message-role {
+  font-size: 12px;
+  color: #666;
+}
+
+.diff-message-index {
+  font-size: 12px;
+  color: #555;
+}
+
+.diff-message-content {
+  font-size: 14px;
+  color: #e0e0e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.diff-same { background: transparent; }
+.diff-diff { background: rgba(220,38,38,0.15); border-color: rgba(220,38,38,0.4); }
+.diff-added { background: rgba(5,150,105,0.15); border-color: rgba(5,150,105,0.4); }
+.diff-removed { background: rgba(220,38,38,0.15); border-color: rgba(220,38,38,0.4); }
+
+.diff-diff .diff-message-role { color: #dc2626; }
+.diff-added .diff-message-role { color: #059669; }
+.diff-removed .diff-message-role { color: #dc2626; }
+
+/* Token 级别差异 */
+.diff-token { display: inline; }
+.diff-token-same { }
+.diff-token-added { background: rgba(5,150,105,0.3); color: #059669; }
+.diff-token-removed { background: rgba(220,38,38,0.35); color: #dc2626; }
+.diff-token-diff { background: rgba(220,38,38,0.5); color: #fff; }
+
+/* 消息标题 */
+.diff-messages-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2a2a2a;
+}
 </style>
 </head>
 <body>
@@ -709,6 +919,27 @@ body.panel-open { overflow: hidden; }
     </button>
     <button class="btn" id="clearBtn" onclick="confirmClear()">清空</button>
   </div>
+</div>
+
+<!-- Diff 对比视图 -->
+<div class="diff-container" id="diffContainer">
+  <div class="diff-header">
+    <div class="diff-header-left" id="diffTitleLeft">上一条请求</div>
+    <div class="diff-header-center">对比视图</div>
+    <div class="diff-header-right">
+      <span id="diffTitleRight">当前请求</span>
+      <button class="diff-close-btn" onclick="closeDiffView()">关闭</button>
+    </div>
+  </div>
+  <div class="diff-body">
+    <div class="diff-panel diff-panel-left" id="diffPanelLeft"></div>
+    <div class="diff-minimap" id="diffMinimap">
+      <div class="diff-minimap-items" id="diffMinimapItems"></div>
+      <div class="diff-minimap-viewport" id="diffMinimapViewport"></div>
+    </div>
+    <div class="diff-panel diff-panel-right" id="diffPanelRight"></div>
+  </div>
+</div>
 </div>
 
 <div class="main">
@@ -734,12 +965,26 @@ body.panel-open { overflow: hidden; }
 <div class="slide-panel" id="slidePanel">
   <div class="panel-header">
     <div class="panel-title" id="panelTitle">详情</div>
-    <button class="panel-close" onclick="closePanel()">×</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="extractDiffBtn" onclick="extractDiffLines()" style="padding:4px 10px;font-size:12px">提取差异</button>
+      <button class="btn" id="diffBtn" onclick="openDiffView()" style="padding:4px 10px;font-size:12px">对比缓存</button>
+      <button class="panel-close" onclick="closePanel()">×</button>
+    </div>
   </div>
   <div class="panel-body" id="panelBody"></div>
 </div>
 
 <script>
+// 拆分日期和时间，只让时间部分 hover 高亮
+function splitTime(time) {
+  if (!time) return '';
+  const parts = time.split(' ');
+  if (parts.length === 2) {
+    return `<span class="log-time-date">${parts[0]}</span> <span class="log-time-clock">${parts[1]}</span>`;
+  }
+  return time;
+}
+
 let autoRefreshEnabled = true;
 let sseConnection = null;
 let expandedLogId = null;
@@ -748,6 +993,23 @@ let viewModes = {}; // 存储每条日志的视图模式: 'friendly' 或 'raw'
 document.addEventListener('DOMContentLoaded', async () => {
   fetchLogs(); // 初始加载
   startSseConnection();
+
+  // ESC 键关闭侧边栏和对比视图
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // 先检查对比视图
+      const diffContainer = document.getElementById('diffContainer');
+      if (diffContainer.classList.contains('open')) {
+        closeDiffView();
+        return;
+      }
+      // 再检查侧边栏
+      const slidePanel = document.getElementById('slidePanel');
+      if (slidePanel.classList.contains('open')) {
+        closePanel();
+      }
+    }
+  });
 });
 
 function startSseConnection() {
@@ -913,6 +1175,19 @@ function buildDistBar(log) {
     </div>`;
   }
 
+  // 查找上一条 POST 请求的 cache 值
+  let prevCacheTokens = 0;
+  if (window.currentLogs) {
+    const currentIndex = window.currentLogs.findIndex(l => l.id === log.id);
+    for (let i = currentIndex - 1; i >= 0; i--) {
+      if (window.currentLogs[i].method === 'POST') {
+        const prevUsage = window.currentLogs[i].response?.usage;
+        prevCacheTokens = prevUsage?.cache_read_input_tokens || 0;
+        break;
+      }
+    }
+  }
+
   // 分析请求消息
   const messages = log.request?.messages || [];
   const userMsgs = messages.filter(m => m.role === 'user');
@@ -1041,10 +1316,15 @@ function buildDistBar(log) {
     const cachePct = (cacheTokens / totalInputWithCache) * 100;
     const inputPct = (actualInput / totalInputWithCache) * 100;
 
-    html += `<div class="dist-category dist-cat-cache">
+    // 如果当前 cache 小于上一条，显示红色警告
+    const cacheDecreased = prevCacheTokens > 0 && cacheTokens < prevCacheTokens;
+    const cacheClass = cacheDecreased ? 'dist-cat-cache-warning' : 'dist-cat-cache';
+    const cacheValueClass = cacheDecreased ? 'dist-cat-value cache-warning' : 'dist-cat-value cache';
+
+    html += `<div class="dist-category ${cacheClass}">
       <div class="dist-cat-label">Cache</div>
       <div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${Math.min(100, cachePct)}%"></div></div>
-      <div class="dist-cat-value cache">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)</div>
+      <div class="dist-cat-value cache">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)${cacheDecreased ? `<span style="color:#dc2626"> ↓${fmtTokens(prevCacheTokens - cacheTokens)}</span>` : ''}</div>
     </div>`;
     html += `<div class="dist-category">
       <div class="dist-cat-label">Input</div>
@@ -1313,7 +1593,7 @@ function renderLogs(logs) {
 
     // 头部信息
     html += `<div class="log-header">
-      <div class="log-time">${log.time}</div>
+      <div class="log-time">${splitTime(log.time)}</div>
       <div class="log-method ${log.method}">${log.method}</div>
       <div class="log-path">${log.path}</div>
       <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
@@ -1341,6 +1621,8 @@ function toggleDetail(logId) {
   const log = window.currentLogs?.find(l => l.id === logId);
   if (!log) return;
 
+  expandedLogId = logId; // 设置当前展开的日志 ID
+
   // 打开右侧面板，禁止主页面滚动
   document.body.classList.add('panel-open');
   document.getElementById('slidePanel').classList.add('open');
@@ -1362,6 +1644,479 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// Diff 对比功能
+let currentDiffLogId = null;
+
+// 提取差异行
+function extractDiffLines() {
+  if (!expandedLogId) return;
+  currentDiffLogId = expandedLogId;
+
+  const currentLog = window.currentLogs?.find(l => l.id === currentDiffLogId);
+  if (!currentLog) return;
+
+  // 找上一条 POST 请求
+  const logs = window.currentLogs || [];
+  const currentIndex = logs.findIndex(l => l.id === currentDiffLogId);
+  let prevLog = null;
+
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    if (logs[i].method === 'POST') {
+      prevLog = logs[i];
+      break;
+    }
+  }
+
+  if (!prevLog) {
+    alert('没有可对比的更早 POST 请求');
+    return;
+  }
+
+  const currentMsgs = currentLog.request?.messages || [];
+  const prevMsgs = prevLog.request?.messages || [];
+
+  // 提取差异行
+  const diffs = [];
+  const maxLen = Math.max(currentMsgs.length, prevMsgs.length);
+
+  for (let i = 0; i < maxLen; i++) {
+    const curr = currentMsgs[i];
+    const prev = prevMsgs[i];
+
+    const currContent = curr ? getText(curr.content) : '';
+    const prevContent = prev ? getText(prev.content) : '';
+
+    if (currContent !== prevContent) {
+      diffs.push({
+        index: i + 1,
+        last: prev ? prevContent : null,
+        new: curr ? currContent : null
+      });
+    }
+  }
+
+  if (diffs.length === 0) {
+    alert('没有发现差异');
+    return;
+  }
+
+  // 构建输出格式
+  let output = '';
+  for (const d of diffs) {
+    output += `## last (#${d.index})\n`;
+    output += '```json\n';
+    if (d.last) {
+      output += d.last + '\n';
+    }
+    output += '```\n';
+    output += `## new (#${d.index})\n`;
+    output += '```json\n';
+    if (d.new) {
+      output += d.new + '\n';
+    }
+    output += '```\n';
+    output += '---\n';
+  }
+
+  // 复制到剪贴板
+  navigator.clipboard.writeText(output).then(() => {
+    alert(`已复制 ${diffs.length} 条差异到剪贴板`);
+  }).catch(() => {
+    console.log(output);
+    alert('差异内容已打印到控制台');
+  });
+}
+
+function openDiffView() {
+  if (!expandedLogId) return;
+  currentDiffLogId = expandedLogId;
+
+  const currentLog = window.currentLogs?.find(l => l.id === currentDiffLogId);
+  if (!currentLog) return;
+
+  // 找上一条 POST 请求（时间上更早的）
+  const logs = window.currentLogs || [];
+  const currentIndex = logs.findIndex(l => l.id === currentDiffLogId);
+  let prevLog = null;
+
+  // 往前找（索引减小方向），找到时间上更早的 POST 请求
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    if (logs[i].method === 'POST') {
+      prevLog = logs[i];
+      break;
+    }
+  }
+
+  if (!prevLog) {
+    alert('没有可对比的更早 POST 请求');
+    return;
+  }
+
+  // 关闭详情面板
+  closePanel();
+
+  // 打开 diff 视图
+  document.getElementById('diffContainer').classList.add('open');
+  document.getElementById('diffTitleLeft').textContent = `上一条 #${prevLog.id}`;
+  document.getElementById('diffTitleRight').textContent = `当前 #${currentLog.id}`;
+
+  // 渲染对比
+  renderDiffMessages(
+    currentLog.request?.messages || [],
+    prevLog.request?.messages || []
+  );
+}
+
+function closeDiffView() {
+  document.getElementById('diffContainer').classList.remove('open');
+  currentDiffLogId = null;
+}
+
+// Token 级别 LCS diff
+function tokenizeText(text) {
+  if (!text) return [];
+  try {
+    const tokens = GPTTokenizer_cl100k_base.encode(text);
+    return tokens.map(t => {
+      const decoded = GPTTokenizer_cl100k_base.decode([t]);
+      return { id: t, text: decoded };
+    });
+  } catch {
+    // fallback: 按字符分割
+    return text.split('').map((c, i) => ({ id: i, text: c }));
+  }
+}
+
+// LCS diff 算法，返回差异标记
+function lcsDiff(tokensA, tokensB) {
+  const m = tokensA.length;
+  const n = tokensB.length;
+
+  // LCS 表
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (tokensA[i - 1].id === tokensB[j - 1].id) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  // 回溯找出差异
+  const resultA = [];
+  const resultB = [];
+  let i = m, j = n;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && tokensA[i - 1].id === tokensB[j - 1].id) {
+      resultA.unshift({ ...tokensA[i - 1], status: 'same' });
+      resultB.unshift({ ...tokensB[j - 1], status: 'same' });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      resultB.unshift({ ...tokensB[j - 1], status: 'added' });
+      j--;
+    } else if (i > 0) {
+      resultA.unshift({ ...tokensA[i - 1], status: 'removed' });
+      i--;
+    }
+  }
+
+  return { tokensA: resultA, tokensB: resultB };
+}
+
+// 渲染 token diff 内容
+function renderTokenDiffContent(tokens) {
+  if (!tokens || tokens.length === 0) return '';
+
+  let html = '';
+  let buffer = '';
+  let currentStatus = null;
+
+  for (const token of tokens) {
+    if (token.status !== currentStatus) {
+      if (buffer) {
+        const cls = currentStatus === 'same' ? 'diff-token-same' :
+                    currentStatus === 'added' ? 'diff-token-added' :
+                    currentStatus === 'removed' ? 'diff-token-removed' : 'diff-token-diff';
+        html += `<span class="diff-token ${cls}">${escapeHtml(buffer)}</span>`;
+      }
+      buffer = token.text;
+      currentStatus = token.status;
+    } else {
+      buffer += token.text;
+    }
+  }
+
+  // 输出最后的 buffer
+  if (buffer) {
+    const cls = currentStatus === 'same' ? 'diff-token-same' :
+                currentStatus === 'added' ? 'diff-token-added' :
+                currentStatus === 'removed' ? 'diff-token-removed' : 'diff-token-diff';
+    html += `<span class="diff-token ${cls}">${escapeHtml(buffer)}</span>`;
+  }
+
+  return html;
+}
+
+function renderDiffMessages(currentMsgs, prevMsgs) {
+  const leftPanel = document.getElementById('diffPanelLeft');
+  const rightPanel = document.getElementById('diffPanelRight');
+  const minimapItems = document.getElementById('diffMinimapItems');
+
+  const maxLen = Math.max(currentMsgs.length, prevMsgs.length);
+  let leftHtml = '';
+  let rightHtml = '';
+  let minimapHtml = '';
+
+  // Token 计算
+  const countTokens = (text) => {
+    const t = getText(text);
+    if (!t) return 0;
+    try {
+      return GPTTokenizer_cl100k_base.encode(t).length;
+    } catch {
+      return Math.ceil(t.length / 2);
+    }
+  };
+
+  // 计算所有消息的总 token（用于比例）
+  let totalTokens = 0;
+  const tokenCounts = [];
+  for (let i = 0; i < maxLen; i++) {
+    const curr = currentMsgs[i];
+    const prev = prevMsgs[i];
+    const maxTokens = Math.max(
+      curr ? countTokens(curr.content) : 0,
+      prev ? countTokens(prev.content) : 0
+    );
+    tokenCounts.push(maxTokens);
+    totalTokens += maxTokens;
+  }
+
+  // minimap 可用高度（扣除 padding）
+  const minimapAvailableHeight = window.innerHeight - 80; // header 48px + padding 16px*2
+
+  for (let i = 0; i < maxLen; i++) {
+    const curr = currentMsgs[i];
+    const prev = prevMsgs[i];
+
+    const currTokens = curr ? countTokens(curr.content) : 0;
+    const prevTokens = prev ? countTokens(prev.content) : 0;
+    const tokenDiff = currTokens - prevTokens;
+
+    let status = 'same';
+
+    if (!prev && curr) {
+      status = 'added';
+    } else if (prev && !curr) {
+      status = 'removed';
+    } else if (JSON.stringify(curr) !== JSON.stringify(prev)) {
+      status = 'diff';
+    } else if (tokenDiff !== 0) {
+      status = 'diff';
+    }
+
+    // 索引从 1 开始
+    const displayIndex = i + 1;
+
+    // 计算 minimap 高度（按 token 比例，最小 6px）
+    const heightPct = tokenCounts[i] / totalTokens;
+    const itemHeight = Math.max(6, Math.round(heightPct * minimapAvailableHeight));
+
+    // Token diff 计算（只在有差异时）
+    let tokenDiffResult = null;
+    if (status === 'diff' && curr && prev) {
+      const currContent = getText(curr.content);
+      const prevContent = getText(prev.content);
+      const tokensA = tokenizeText(prevContent);
+      const tokensB = tokenizeText(currContent);
+      tokenDiffResult = lcsDiff(tokensA, tokensB);
+    }
+
+    leftHtml += renderDiffMessage(prev, displayIndex, prevTokens, status === 'removed' ? 'removed' : status === 'diff' ? 'diff' : 'same', 0, tokenDiffResult?.tokensA);
+    rightHtml += renderDiffMessage(curr, displayIndex, currTokens, status === 'added' ? 'added' : status === 'diff' ? 'diff' : 'same', tokenDiff, tokenDiffResult?.tokensB);
+    minimapHtml += renderMinimapItem(displayIndex, status, itemHeight);
+  }
+
+  leftPanel.innerHTML = leftHtml || '<div style="color:#666;padding:20px">无消息</div>';
+  rightPanel.innerHTML = rightHtml || '<div style="color:#666;padding:20px">无消息</div>';
+  minimapItems.innerHTML = minimapHtml || '<div style="color:#666;padding:8px;font-size:11px">无差异</div>';
+
+  // 初始化滚动和 minimap
+  initDiffScroll();
+}
+
+function renderMinimapItem(index, status, height) {
+  const statusClass = status === 'same' ? 'diff-minimap-same' :
+                      status === 'added' ? 'diff-minimap-added' :
+                      status === 'removed' ? 'diff-minimap-removed' : 'diff-minimap-diff';
+
+  return `<div class="diff-minimap-item ${statusClass}" style="height:${height}px" data-index="${index}" onclick="scrollToDiffMessage(${index})"></div>`;
+}
+
+function renderDiffMessage(msg, index, tokens, status, tokenDiff = 0, tokenDiffTokens = null) {
+  const statusClass = status === 'same' ? 'diff-same' :
+                      status === 'added' ? 'diff-added' :
+                      status === 'removed' ? 'diff-removed' : 'diff-diff';
+
+  if (!msg) {
+    return `<div class="diff-message ${statusClass}" style="opacity:0.3" data-index="${index}">
+      <div class="diff-message-header">
+        <div class="diff-message-index">#${index}</div>
+      </div>
+      <div class="diff-message-content" style="color:#555">—</div>
+    </div>`;
+  }
+
+  const role = msg.role || 'unknown';
+  const content = getText(msg.content);
+  const tokenInfo = tokenDiff !== 0 ? `<span style="color:#d97706;font-size:11px"> (${tokenDiff > 0 ? '+' : ''}${tokenDiff})</span>` : '';
+
+  // 使用 token diff 渲染，或者普通渲染
+  const contentHtml = tokenDiffTokens ? renderTokenDiffContent(tokenDiffTokens) : escapeHtml(content);
+
+  return `<div class="diff-message ${statusClass}" data-index="${index}">
+    <div class="diff-message-header">
+      <div class="diff-message-role">${role}</div>
+      <div class="diff-message-index">#${index} · ${tokens}t${tokenInfo}</div>
+    </div>
+    <div class="diff-message-content">${contentHtml}</div>
+  </div>`;
+}
+
+function scrollToDiffMessage(index) {
+  const leftPanel = document.getElementById('diffPanelLeft');
+  const rightPanel = document.getElementById('diffPanelRight');
+
+  // 找到对应的消息元素
+  const leftMsg = leftPanel.querySelector(`[data-index="${index}"]`);
+  const rightMsg = rightPanel.querySelector(`[data-index="${index}"]`);
+
+  if (leftMsg || rightMsg) {
+    // 计算滚动位置（消息顶部对齐）
+    const targetTop = (leftMsg?.offsetTop || rightMsg?.offsetTop || 0) - 20;
+    const maxScroll = Math.max(
+      leftPanel.scrollHeight - leftPanel.clientHeight,
+      rightPanel.scrollHeight - rightPanel.clientHeight
+    );
+
+    // 同时滚动两个面板
+    leftPanel.scrollTop = targetTop;
+    rightPanel.scrollTop = targetTop;
+
+    // 更 minimap 视口位置
+    const minimapItems = document.getElementById('diffMinimapItems');
+    const viewport = document.getElementById('diffMinimapViewport');
+
+    // 根据滚动比例更新视口
+    const ratio = Math.min(1, Math.max(0, targetTop / maxScroll));
+    const minimapHeight = minimapItems.clientHeight;
+    const viewportHeight = viewport.clientHeight;
+
+    viewport.style.top = (8 + ratio * (minimapHeight - viewportHeight)) + 'px';
+  }
+}
+
+function initDiffScroll() {
+  const leftPanel = document.getElementById('diffPanelLeft');
+  const rightPanel = document.getElementById('diffPanelRight');
+  const minimap = document.getElementById('diffMinimap');
+  const viewport = document.getElementById('diffMinimapViewport');
+  const minimapItems = document.getElementById('diffMinimapItems');
+  const diffContainer = document.getElementById('diffContainer');
+
+  let isDragging = false;
+
+  // 更新视口位置和面板滚动
+  function updateByRatio(ratio) {
+    const maxScroll = Math.max(
+      leftPanel.scrollHeight - leftPanel.clientHeight,
+      rightPanel.scrollHeight - rightPanel.clientHeight
+    );
+
+    const scrollTop = ratio * maxScroll;
+    leftPanel.scrollTop = scrollTop;
+    rightPanel.scrollTop = scrollTop;
+
+    // 更新视口指示器
+    const minimapHeight = minimapItems.clientHeight;
+    const viewportHeight = Math.max(16, (leftPanel.clientHeight / Math.max(leftPanel.scrollHeight, rightPanel.scrollHeight)) * minimapHeight);
+    const viewportTop = 8 + ratio * (minimapHeight - viewportHeight);
+
+    viewport.style.height = viewportHeight + 'px';
+    viewport.style.top = viewportTop + 'px';
+  }
+
+  // minimap 拖动
+  minimap.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    handleMinimapDrag(e);
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    handleMinimapDrag(e);
+  });
+
+  document.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  // minimap 滚轮事件 - 控制对比列表滚动
+  minimap.addEventListener('wheel', (e) => {
+    const maxScroll = Math.max(
+      leftPanel.scrollHeight - leftPanel.clientHeight,
+      rightPanel.scrollHeight - rightPanel.clientHeight
+    );
+    const currentRatio = leftPanel.scrollTop / maxScroll;
+    const delta = e.deltaY > 0 ? 0.01 : -0.01;
+    const newRatio = Math.max(0, Math.min(1, currentRatio + delta));
+    updateByRatio(newRatio);
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+
+  // diff 面板滚轮事件
+  const panelWheelHandler = (e) => {
+    const maxScroll = Math.max(
+      leftPanel.scrollHeight - leftPanel.clientHeight,
+      rightPanel.scrollHeight - rightPanel.clientHeight
+    );
+    const currentRatio = leftPanel.scrollTop / maxScroll;
+    const delta = e.deltaY > 0 ? 0.01 : -0.01;
+    const newRatio = Math.max(0, Math.min(1, currentRatio + delta));
+    updateByRatio(newRatio);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  leftPanel.addEventListener('wheel', panelWheelHandler, { passive: false });
+  rightPanel.addEventListener('wheel', panelWheelHandler, { passive: false });
+
+  function handleMinimapDrag(e) {
+    const minimapRect = minimap.getBoundingClientRect();
+    const yRatio = Math.max(0, Math.min(1, (e.clientY - minimapRect.top - 8) / (minimapRect.height - 16)));
+    updateByRatio(yRatio);
+  }
+
+  // 点击 minimap 条目跳转
+  minimapItems.addEventListener('click', (e) => {
+    const item = e.target.closest('.diff-minimap-item');
+    if (!item) return;
+    const index = parseInt(item.dataset.index);
+    scrollToDiffMessage(index);
+  });
+
+  // 初始化
+  updateByRatio(0);
+}
+
+function initDiffDrag() {}
 </script>
 
 </body>

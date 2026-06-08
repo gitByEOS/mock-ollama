@@ -4,10 +4,9 @@
 
 当前主要用途：
 
-- 代理 OpenAI 兼容聊天接口
+- 代理 OpenAI/Anthropic 兼容聊天接口
 - 暴露 Ollama 风格的 `api/version`、`api/tags`、`api/show`
-- 兼容部分 Anthropic 风格请求
-- 打印请求和响应，便于查看token消耗
+- Web UI 实时监控请求日志、Token 分布、Cache 命中
 
 ## 安装
 
@@ -16,13 +15,6 @@
 ```bash
 npm install -g mock-ollama
 mock-ollama -h
-```
-
-### 直接用 npx
-
-```bash
-npm install mock-ollama
-npx mock-ollama -h
 ```
 
 ### 本地开发
@@ -61,7 +53,7 @@ curl http://localhost:11434/api/tags
 curl -X POST http://localhost:11434/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "glm-4.6",
+    "model": "glm-5",
     "messages": [
       { "role": "user", "content": "你好" }
     ]
@@ -80,54 +72,21 @@ mock-ollama --url <上游地址> --apikey <上游密钥>
 - `--port`：监听端口，默认 `11434`
 - `--url`：上游服务地址
 - `--apikey`：上游服务密钥
-- `--provider-preset`：额外 provider JSON 配置
-- `--quiet`：安静模式，只关闭 `ObjectDump` 日志
+- `--quiet`：安静模式，关闭详细日志
+- `--open`：启动后自动打开浏览器
+- `--max_context`：网页上下文上限（token），默认 `200000`
 
 ## 环境变量
 
-- `MOCK_OLLAMA_BASE_URL`
-- `MOCK_OLLAMA_API_KEY`
-- `MOCK_OLLAMA_PROVIDER_PRESET`
+- `MOCK_OLLAMA_BASE_URL`：上游服务地址
+- `MOCK_OLLAMA_API_KEY`：上游服务密钥
 
 示例：
 
 ```bash
 export MOCK_OLLAMA_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
 export MOCK_OLLAMA_API_KEY="your-api-key"
-export MOCK_OLLAMA_PROVIDER_PRESET='{
-  "my-glm": {
-    "matchStr": "bigmodel.cn",
-    "apiPath": {
-      "chat": "/chat/completions",
-      "tags": "/models"
-    }
-  }
-}'
 mock-ollama
-```
-
-## Provider 预设
-
-内置会根据 `baseUrl` 自动匹配 provider。
-
-当前内置示例：
-
-- `api.anthropic.com`
-- `api.deepseek.com`
-- `bigmodel.cn`
-
-如果内置不够，就自己传一段 JSON merge 进去：
-
-```json
-{
-  "my-provider": {
-    "matchStr": "example.com",
-    "apiPath": {
-      "chat": "/chat/completions",
-      "tags": "/models"
-    }
-  }
-}
 ```
 
 ## 路由接口
@@ -139,6 +98,34 @@ mock-ollama
 - `POST /chat/completions`
 - `POST /v1/chat/completions`
 - `POST /v1/messages`
+
+## Web UI
+
+启动后访问 `http://localhost:11434` 即可打开 Web 监控界面。
+
+功能：
+
+- **实时推送**：SSE 实时接收新请求，自动刷新列表
+- **Token 分布条**：可视化展示 System/User/Assistant/Thinking/Response 等各部分占比
+- **Cache 监控**：显示缓存命中情况，缓存下降时红色警告
+- **友好视图**：解析请求/响应，展示关键信息
+- **原始数据**：一键复制完整 JSON 数据
+- **对比视图**：与上一条 POST 请求对比，Token 级别 LCS diff 高亮差异
+- **提取差异**：一键提取变化的消息内容，复制到剪贴板
+
+界面截图：
+
+### 主界面
+
+![主界面](docs/main_view.png)
+
+### 详情面板
+
+![详情面板](docs/detail_view.png)
+
+### 对比视图
+
+![对比视图](docs/diff_view.png)
 
 ## 许可证
 

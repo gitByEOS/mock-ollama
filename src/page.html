@@ -20,64 +20,148 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 14px 24px;
   background: #1a1a1a;
   border-bottom: 1px solid #2a2a2a;
+  overflow: visible;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 16px;
+  position: relative;
+}
+
+.logo-container {
+  position: relative;
+  display: inline-block;
 }
 
 .logo {
   font-size: 24px;
   font-weight: 700;
-  color: #fff;
+  color: #e5e7eb;
   letter-spacing: -0.5px;
   position: relative;
   display: inline-block;
-  padding: 12px 20px;
-  /* 立体投影：多层递进 */
+  padding: 4px 12px;
+  transition: color 2s ease-out, text-shadow 2s ease-out;
   text-shadow:
-    /* 光晕层 */
-    0 0 10px rgba(255,255,255,0.3),
-    0 0 20px rgba(255,255,255,0.2),
-    /* 立体阴影层 */
     1px 1px 0 #333,
     2px 2px 0 #2a2a2a,
-    3px 3px 0 #1a1a1a,
-    4px 4px 0 #0a0a0a,
-    5px 5px 10px rgba(0,0,0,0.6);
+    3px 3px 0 #1a1a1a;
 }
 
-/* 黑色线框层 */
-.logo::before {
-  content: 'mock-ollama';
+/* Logo 点亮效果 */
+.logo.illuminated {
+  color: #ffffff;
+  text-shadow:
+    0 0 10px rgba(255,255,255,0.8),
+    0 0 20px rgba(255,255,255,0.5),
+    0 0 40px rgba(255,255,255,0.3),
+    1px 1px 0 #333,
+    2px 2px 0 #2a2a2a,
+    3px 3px 0 #1a1a1a;
+  transition: color 0.05s ease-out, text-shadow 0.05s ease-out;
+}
+
+/* SVG 闪电容器 */
+.lightning-svg {
   position: absolute;
-  top: 3px;
-  left: 3px;
+  top: 50%;
+  left: calc(50% - 40px);
+  transform: translate(-50%, -60%) rotate(10deg);
+  width: 120%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 主闪电路径 */
+.lightning-main {
+  fill: none;
+  stroke: url(#lightningGradient);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+/* 闪电分叉 */
+.lightning-branch {
+  fill: none;
+  stroke: url(#branchGradient);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+/* 闪电动画序列 */
+@keyframes strikeSequence {
+  0%, 100% { opacity: 0; }
+  /* 第一次微闪 ~700ms */
+  14% { opacity: 0.6; }
+  15% { opacity: 0; }
+  /* 第二次主闪 ~850ms */
+  17% { opacity: 1; }
+  19% { opacity: 0.9; }
+  21% { opacity: 1; }
+  /* 渐暗 */
+  26% { opacity: 0.4; }
+  /* 熄灭 */
+  32%, 100% { opacity: 0; }
+}
+
+.lightning-main.active,
+.lightning-branch.active {
+  animation: strikeSequence 5s ease-out infinite;
+}
+
+/* 字体电流效果 - SVG text 描边 */
+.logo-current-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 20;
+  overflow: visible;
+}
+
+.logo-current-text {
+  fill: transparent;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.5px;
-  color: transparent;
-  -webkit-text-stroke: 1px #1a1a1a;
-  z-index: -1;
+  stroke-dasharray: 4 16;
+  stroke-dashoffset: 0;
+  opacity: 0;
+  filter: drop-shadow(0 0 3px rgba(255,255,255,0.9));
 }
 
-/* 白色轮廓层 */
-.logo::after {
-  content: 'mock-ollama';
-  position: absolute;
-  top: 1px;
-  left: 1px;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  color: transparent;
-  -webkit-text-stroke: 0.5px rgba(255,255,255,0.2);
-  z-index: -1;
+.logo-current-text.active {
+  opacity: 1;
+  animation: flowTextCurrent 0.55s linear forwards;
+}
+
+@keyframes flowTextCurrent {
+  0% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    stroke-dashoffset: -80;
+    opacity: 0;
+  }
 }
 
 .status-badge {
@@ -121,48 +205,35 @@ body {
 }
 
 .btn:hover { border-color: #555; color: #fff; }
-.btn.active {
-  position: relative;
-  border: 1px solid #2a2a2a;
-  background: rgba(5,150,105,0.08);
-  color: #fff;
-}
-.btn.active::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 9px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Crect width='100%25' height='100%25' rx='8' ry='8' fill='none' stroke='%23059669' stroke-width='1.5' stroke-dasharray='30 170' stroke-dashoffset='0'/%3E%3C/svg%3E");
-  animation: snake-border 3s linear infinite;
-}
-@keyframes snake-border { to { background-position: 200px 0; } }
 
-/* 备用方案：用 SVG 内嵌实现更精确的动画 */
+/* SVG 内嵌实现精确的旋转边框动画 */
 .btn.active-snake {
   position: relative;
   border: 1px solid #3a3a3a;
   background: #1a1a1a;
   color: #fff;
+  overflow: visible;
 }
 .snake-border-svg {
   position: absolute;
-  inset: -1px;
-  width: calc(100% + 2px);
-  height: calc(100% + 2px);
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
   pointer-events: none;
   filter: drop-shadow(0 0 3px rgba(255,255,255,0.9))
           drop-shadow(0 0 6px rgba(255,255,255,0.5))
           drop-shadow(0 0 12px rgba(255,255,255,0.3));
 }
-.snake-border-svg rect {
+.snake-border-svg path {
   fill: none;
   stroke: rgba(255,255,255,0.95);
   stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 20 180;
-  animation: snake-run 2s linear infinite;
+  stroke-linejoin: round;
+  stroke-dasharray: 40 145 40 145;
+  animation: snake-run 4s linear infinite;
 }
-@keyframes snake-run { to { stroke-dashoffset: -200; } }
+@keyframes snake-run { to { stroke-dashoffset: -370; } }
 
 /* 主内容区 */
 .main {
@@ -247,15 +318,6 @@ body {
 .log-status.success { background: rgba(5,150,105,0.2); color: #059669; }
 .log-status.error { background: rgba(220,38,38,0.2); color: #dc2626; }
 
-.log-duration {
-  font-size: 12px;
-  color: #d97706;
-  font-family: 'SF Mono', monospace;
-  width: 80px;
-  text-align: center;
-  line-height: 1;
-}
-
 .log-expand-btn {
   margin-left: auto;
   padding: 4px 10px;
@@ -328,27 +390,7 @@ body {
   transition: all 0.3s;
 }
 
-.seg-inner {
-  white-space: nowrap;
-  padding: 0 4px;
-}
-
-/* 分隔标记 */
-.dist-seg.has-border::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 1px;
-  background: rgba(255,255,255,0.3);
-}
-
-/* 请求段颜色 - 类似 /context */
-.seg-system      { background: #9ca3af; }
-.seg-memory      { background: #7c3aed; }
-.seg-skills      { background: #d97706; }
-.seg-messages    { background: #2563eb; }
+/* 请求段颜色 */
 .seg-user        { background: #2563eb; }
 .seg-assistant   { background: #7c3aed; }
 
@@ -408,6 +450,23 @@ body {
 .dist-cat-value.blue { color: #2563eb; }
 .dist-cat-value.purple { color: #7c3aed; }
 
+.dist-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.dist-meta-line .dist-cat-label {
+  min-width: auto;
+}
+
+.dist-meta-line .dist-meta-sep {
+  color: #444;
+  margin: 0 4px;
+}
+
 /* 详情展开区 */
 .log-detail {
   display: none;
@@ -464,6 +523,11 @@ body {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 请求 JSON 更长 */
+.detail-json.request-json {
+  max-height: 500px;
 }
 
 .detail-error {
@@ -559,35 +623,6 @@ body {
   color: #059669;
   margin-bottom: 4px;
 }
-
-/* Token 分布详情 */
-.token-stats {
-  display: flex;
-  gap: 24px;
-  margin-top: 12px;
-}
-
-.token-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.token-stat-label {
-  font-size: 11px;
-  color: #666;
-}
-
-.token-stat-value {
-  font-size: 14px;
-  font-weight: 600;
-  font-family: 'SF Mono', monospace;
-}
-
-.token-stat-value.blue { color: #2563eb; }
-.token-stat-value.green { color: #059669; }
-.token-stat-value.orange { color: #d97706; }
-.token-stat-value.purple { color: #7c3aed; }
 
 /* Legend */
 .legend {
@@ -785,22 +820,22 @@ body.panel-open { overflow: hidden; }
   left: 6px;
   right: 6px;
   bottom: 8px;
-  display: flex;
-  flex-direction: column;
 }
 
 .diff-minimap-item {
-  min-height: 6px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 4px;
   border-radius: 2px;
   cursor: pointer;
   transition: all 0.15s;
-  min-width: 4px;
 }
 
 .diff-minimap-same { background: rgba(60,60,60,0.4); }
-.diff-minimap-diff { background: #ef4444; border: 2px solid #f87171; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
-.diff-minimap-added { background: #10b981; border: 2px solid #34d399; box-shadow: 0 0 8px rgba(16,185,129,0.6); }
-.diff-minimap-removed { background: #ef4444; border: 2px solid #f87171; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+.diff-minimap-diff { background: #ef4444; }
+.diff-minimap-added { background: #10b981; }
+.diff-minimap-removed { background: #ef4444; }
 
 .diff-minimap-item:hover { filter: brightness(1.5); }
 
@@ -906,7 +941,61 @@ body.panel-open { overflow: hidden; }
 
 <div class="header">
   <div class="header-left">
-    <div class="logo">mock-ollama</div>
+    <div class="logo-container">
+      <!-- SVG 闪电 -->
+      <svg class="lightning-svg" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <!-- 主闪电渐变 -->
+          <linearGradient id="lightningGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#cffafe;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:0.9" />
+          </linearGradient>
+
+          <!-- 分叉渐变 -->
+          <linearGradient id="branchGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#cffafe;stop-opacity:0.9" />
+            <stop offset="100%" style="stop-color:#f8f9fa;stop-opacity:0.6" />
+          </linearGradient>
+
+          <!-- 发光滤镜 -->
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- 主闪电 -->
+        <path class="lightning-main" id="lightningMain"
+              d="M 50,100 L 80,95 L 110,105 L 140,90 L 170,100 L 200,85 L 230,95 L 260,80 L 290,90 L 320,75 L 350,85"/>
+
+        <!-- 分叉 1 - 右上 -->
+        <path class="lightning-branch" id="branch1"
+              d="M 170,100 L 185,85 L 200,70 L 215,60"/>
+
+        <!-- 分叉 2 - 右下 -->
+        <path class="lightning-branch" id="branch2"
+              d="M 230,95 L 245,110 L 260,125 L 275,135" style="animation-delay: 0.05s"/>
+
+        <!-- 分叉 3 - 右上小分叉 -->
+        <path class="lightning-branch" id="branch3"
+              d="M 290,90 L 305,78 L 315,68" style="animation-delay: 0.1s"/>
+      </svg>
+
+      <!-- 字体电流层 -->
+      <svg class="logo-current-svg" id="logoCurrentSvg">
+        <text class="logo-current-text" id="logoCurrent"
+              dominant-baseline="central"
+              text-anchor="middle">mock-ollama</text>
+      </svg>
+
+      <!-- Logo -->
+      <div class="logo" id="logo">mock-ollama</div>
+    </div>
     <div class="status-badge">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">已连接</span>
@@ -914,7 +1003,9 @@ body.panel-open { overflow: hidden; }
   </div>
   <div class="header-controls">
     <button class="btn active-snake" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
-      <svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0.5" y="0.5" width="99" height="99" rx="8"/></svg>
+      <svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path d="M 14.5,0.5 L 85.5,0.5 A 14,14 0 0,1 99.5,14 L 99.5,85.5 A 14,14 0 0,1 85.5,99.5 L 14.5,99.5 A 14,14 0 0,1 0.5,85.5 L 0.5,14 A 14,14 0 0,1 14.5,0.5"/>
+      </svg>
       实时推送
     </button>
     <button class="btn" id="clearBtn" onclick="confirmClear()">清空</button>
@@ -939,7 +1030,6 @@ body.panel-open { overflow: hidden; }
     </div>
     <div class="diff-panel diff-panel-right" id="diffPanelRight"></div>
   </div>
-</div>
 </div>
 
 <div class="main">
@@ -975,6 +1065,68 @@ body.panel-open { overflow: hidden; }
 </div>
 
 <script>
+// Lightning animation for logo
+(function() {
+  // 对齐 SVG 文字到 logo div
+  function alignCurrentText() {
+    const logo = document.getElementById('logo');
+    const svg = document.getElementById('logoCurrentSvg');
+    const text = document.getElementById('logoCurrent');
+    if (!logo || !svg || !text) return;
+    const w = logo.offsetWidth;
+    const h = logo.offsetHeight;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    text.setAttribute('x', w / 2);
+    text.setAttribute('y', h / 2);
+  }
+
+  // 点亮 logo 和文字电流
+  function illuminateLogo() {
+    const logo = document.getElementById('logo');
+    const textCurrent = document.getElementById('logoCurrent');
+    if (!logo || !textCurrent) return;
+
+    logo.classList.add('illuminated');
+    textCurrent.classList.add('active');
+
+    // 移除点亮效果
+    setTimeout(() => {
+      logo.classList.remove('illuminated');
+    }, 300);
+
+    // 重置文字电流
+    setTimeout(() => {
+      textCurrent.classList.remove('active');
+    }, 650);
+  }
+
+  // 启动闪电动画（只执行一次）
+  function startLightning() {
+    const main = document.getElementById('lightningMain');
+    const branches = document.querySelectorAll('.lightning-branch');
+    if (!main) return;
+
+    // 只在第一次添加 active 类，之后 CSS 动画自然循环
+    main.classList.add('active');
+    branches.forEach(b => b.classList.add('active'));
+
+    // 监听 CSS 动画每次循环开始
+    main.addEventListener('animationiteration', () => {
+      // CSS 动画周期开始，在主闪时刻(850ms)点亮
+      setTimeout(illuminateLogo, 850);
+    });
+
+    // 第一次点亮（初始延迟 + 850ms）
+    setTimeout(illuminateLogo, 500 + 850);
+  }
+
+  // 初始化
+  window.addEventListener('load', () => {
+    alignCurrentText();
+    setTimeout(startLightning, 500);
+  });
+})();
+
 // 拆分日期和时间，只让时间部分 hover 高亮
 function splitTime(time) {
   if (!time) return '';
@@ -989,8 +1141,20 @@ let autoRefreshEnabled = true;
 let sseConnection = null;
 let expandedLogId = null;
 let viewModes = {}; // 存储每条日志的视图模式: 'friendly' 或 'raw'
+let appContextLength = 200000;
+
+async function loadAppInfo() {
+  try {
+    const res = await fetch('/api/info');
+    const info = await res.json();
+    appContextLength = info.contextLength ?? 200000;
+  } catch (err) {
+    console.warn('加载服务配置失败:', err);
+  }
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await loadAppInfo();
   fetchLogs(); // 初始加载
   startSseConnection();
 
@@ -1024,11 +1188,48 @@ function startSseConnection() {
       // 追加到当前日志列表
       if (!window.currentLogs) window.currentLogs = [];
       window.currentLogs.push(newLog);
-      // 限制显示数量
+
+      // 增量追加到页面（不重新渲染已有内容）
+      const container = document.getElementById('logContainer');
+      if (container.querySelector('.empty-state')) {
+        // 如果是空状态，先清除
+        container.innerHTML = '';
+      }
+
+      // 渲染单个新卡片（插入到最前面）
+      const cardHtml = renderSingleLogCard(newLog);
+      container.insertAdjacentHTML('afterbegin', cardHtml);
+
+      // 延迟渲染分布条（单个日志直接用 requestIdleCallback）
+      const newCard = container.querySelector(`.log-card[data-log-id="${newLog.id}"]`);
+      if (newCard && newLog.method === 'POST') {
+        const placeholder = newCard.querySelector('.dist-bar-placeholder');
+        if (placeholder) {
+          const renderBar = () => {
+            try {
+              placeholder.outerHTML = `<div class="dist-bar-wrap">${buildDistBar(newLog)}</div>`;
+            } catch (err) {
+              console.error('buildDistBar error:', err);
+            }
+          };
+          if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(renderBar, { timeout: 100 });
+          } else {
+            setTimeout(renderBar, 50);
+          }
+        }
+      }
+
+      // 限制显示数量（移除超出的旧卡片）
       if (window.currentLogs.length > 50) {
         window.currentLogs = window.currentLogs.slice(-50);
+        const cards = container.querySelectorAll('.log-card');
+        if (cards.length > 50) {
+          for (let i = 50; i < cards.length; i++) {
+            cards[i].remove();
+          }
+        }
       }
-      renderLogs(window.currentLogs);
     } catch (err) {
       console.error('SSE new-log parse error:', err);
     }
@@ -1079,7 +1280,7 @@ function updateAutoRefreshBtn() {
   const btn = document.getElementById('autoRefreshBtn');
   if (autoRefreshEnabled) {
     btn.className = 'btn active-snake';
-    btn.innerHTML = `<svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0.5" y="0.5" width="99" height="99" rx="8"/></svg>实时推送`;
+    btn.innerHTML = `<svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M 14.5,0.5 L 85.5,0.5 A 14,14 0 0,1 99.5,14 L 99.5,85.5 A 14,14 0 0,1 85.5,99.5 L 14.5,99.5 A 14,14 0 0,1 0.5,85.5 L 0.5,14 A 14,14 0 0,1 14.5,0.5"/></svg>实时推送`;
   } else {
     btn.className = 'btn';
     btn.textContent = '开始推送';
@@ -1090,18 +1291,10 @@ function toggleAutoRefresh() {
   autoRefreshEnabled = !autoRefreshEnabled;
   if (autoRefreshEnabled) {
     startSseConnection();
-    fetchLogs(); // 重新获取最新日志
-  } else {
-    stopSseConnection();
-  }
-  updateAutoRefreshBtn();
-}
-
-function toggleAutoRefresh() {
-  autoRefreshEnabled = !autoRefreshEnabled;
-  if (autoRefreshEnabled) {
-    startSseConnection();
-    fetchLogs(); // 重新获取最新日志
+    // 只在没有日志时才获取（避免重新渲染已有内容）
+    if (!window.currentLogs || window.currentLogs.length === 0) {
+      fetchLogs();
+    }
   } else {
     stopSseConnection();
   }
@@ -1193,6 +1386,7 @@ function buildDistBar(log) {
   const userMsgs = messages.filter(m => m.role === 'user');
   const assistantMsgs = messages.filter(m => m.role === 'assistant');
   const systemMsgs = messages.filter(m => m.role === 'system');
+  const requestSystem = log.request?.system;
 
   // 精确计算 token 数量（使用 gpt-tokenizer）
   const countTokens = (text) => {
@@ -1205,7 +1399,8 @@ function buildDistBar(log) {
     }
   };
 
-  const systemTokens = systemMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
+  const systemTokens = systemMsgs.reduce((sum, m) => sum + countTokens(m.content), 0)
+    + (requestSystem ? countTokens(requestSystem) : 0);
   const assistantTokens = assistantMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
   const userTokens = userMsgs.reduce((sum, m) => sum + countTokens(m.content), 0);
   const requestTotal = systemTokens + assistantTokens + userTokens;
@@ -1223,24 +1418,20 @@ function buildDistBar(log) {
   const responseText = sseStats?.textLen > 0 ? getText(log.response.assistantText) : '';
   const thinkingText = sseStats?.thinkingLen > 0 ? getText(log.response.thinking) : '';
 
-  // 估算总上下文（假设 200k 为上限）
-  const MAX_CONTEXT = 200000;
-  const totalTokens = requestTotal + responseTotal;
-  const freeTokens = MAX_CONTEXT - totalTokens;
-  const usedPct = Math.round((totalTokens / MAX_CONTEXT) * 100);
+  const modelName = log.response?.message?.model || log.request?.model || 'unknown';
+  const maxContext = appContextLength;
 
   let html = '<div class="dist-bar-container">';
 
-  // 格式化函数
   const fmtPct = (v) => v.toFixed(2);
   const fmtTokens = (v) => v >= 1000 ? (v / 1000).toFixed(2) + 'k' : v.toString();
+  const toPct = (v) => Math.round(v * 100) / 100;
+  const pctOf = (tokens, base) => base > 0 ? toPct((tokens / base) * 100) : 0;
 
-  // 检测 cache tokens
   const usage = sseStats?.usage || log.response?.usage;
   const hasUsage = usage?.input_tokens !== undefined;
   const cacheTokens = usage?.cache_read_input_tokens || 0;
 
-  // 总量计算：优先用真实 usage，避免重复计算
   let totalInput;
   if (hasUsage) {
     totalInput = usage.input_tokens + cacheTokens;
@@ -1248,28 +1439,29 @@ function buildDistBar(log) {
     totalInput = requestTotal;
   }
   const totalWithCache = totalInput + responseTotal;
+  const barBase = maxContext || totalWithCache || 1;
 
-  // === 顶部概览 ===
   const totalK = (totalWithCache / 1000).toFixed(2);
-  const freeK = ((MAX_CONTEXT - totalWithCache) / 1000).toFixed(2);
-  const usedPctWithCache = Math.round((totalWithCache / MAX_CONTEXT) * 100);
+  const totalSummary = maxContext
+    ? `${totalK}k/${(maxContext / 1000).toFixed(0)}k tokens (${fmtPct(pctOf(totalWithCache, maxContext))}%)`
+    : `${totalK}k tokens`;
+
   html += `<div class="dist-header">
-    <div class="dist-model">${log.request?.model || 'unknown'}</div>
-    <div class="dist-total">${totalK}k/${MAX_CONTEXT/1000}k tokens (${fmtPct(usedPctWithCache)}%)</div>
+    <div class="dist-model">${escapeHtml(modelName)}</div>
+    <div class="dist-total">${totalSummary}</div>
   </div>`;
 
-  // === 横向总览条 ===
-  html += '<div class="dist-bar">';
-  const toPct = (v) => Math.round(v * 100) / 100;
-  const systemPct = toPct(Math.max(2, (systemTokens / MAX_CONTEXT) * 100));
-  const assistantPct = toPct(Math.max(0, (assistantTokens / MAX_CONTEXT) * 100));
-  const userPct = toPct(Math.max(0, (userTokens / MAX_CONTEXT) * 100));
-  const thinkingPct = toPct(Math.max(0, (thinkingTokens / MAX_CONTEXT) * 100));
-  const textPct = toPct(Math.max(0, (textTokens / MAX_CONTEXT) * 100));
-  const freePct = toPct(100 - systemPct - assistantPct - userPct - thinkingPct - textPct);
+  const systemPct = toPct(Math.max(systemTokens > 0 ? 2 : 0, pctOf(systemTokens, barBase)));
+  const assistantPct = toPct(Math.max(0, pctOf(assistantTokens, barBase)));
+  const userPct = toPct(Math.max(0, pctOf(userTokens, barBase)));
+  const thinkingPct = toPct(Math.max(0, pctOf(thinkingTokens, barBase)));
+  const textPct = toPct(Math.max(0, pctOf(textTokens, barBase)));
+  const usedPctSum = systemPct + assistantPct + userPct + thinkingPct + textPct;
+  const freePct = maxContext ? toPct(Math.max(0, 100 - usedPctSum)) : 0;
 
+  html += '<div class="dist-bar">';
   if (systemPct > 1) html += `<div class="dist-seg seg-system" style="width:${systemPct}%"></div>`;
-  if (assistantPct > 1) html += `<div class="dist-seg seg-assistant has-border" style="width:${assistantPct}%"></div>`;
+  if (assistantPct > 1) html += `<div class="dist-seg seg-assistant" style="width:${assistantPct}%"></div>`;
   if (userPct > 1) html += `<div class="dist-seg seg-user" style="width:${userPct}%"></div>`;
   if (thinkingPct > 1) html += `<div class="dist-seg seg-thinking" style="width:${thinkingPct}%"></div>`;
   if (textPct > 1) html += `<div class="dist-seg seg-text" style="width:${textPct}%"></div>`;
@@ -1355,14 +1547,16 @@ function buildDistBar(log) {
     </div>`;
   }
 
-  // Free space
-  html += '<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Available</div>';
-  const freePctActual = 100 - usedPctWithCache;
-  html += `<div class="dist-category">
-    <div class="dist-cat-label">Free</div>
-    <div class="dist-cat-bar"><div class="dist-cat-fill seg-free" style="width:${Math.min(100, freePctActual)}%"></div></div>
-    <div class="dist-cat-value">${freeK}k (${fmtPct(freePctActual)}%)</div>
-  </div>`;
+  if (maxContext) {
+    const freeTokens = Math.max(0, maxContext - totalWithCache);
+    const freePctActual = pctOf(freeTokens, maxContext);
+    html += '<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Available</div>';
+    html += `<div class="dist-category">
+      <div class="dist-cat-label">Free</div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-free" style="width:${Math.min(100, freePctActual)}%"></div></div>
+      <div class="dist-cat-value">${fmtTokens(freeTokens)} (${fmtPct(freePctActual)}%)</div>
+    </div>`;
+  }
 
   html += '</div>';
 
@@ -1388,50 +1582,105 @@ function buildDistBar(log) {
     html += '</div>';
   }
 
-  // === 耗时信息 ===
-  html += `<div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a">
-    <div class="dist-category">
-      <div class="dist-cat-label">耗时</div>
-      <div class="dist-cat-value orange">${log.duration || '-'}ms</div>
-    </div>`;
+  // === 耗时信息（单行） ===
+  const metaParts = [`<span class="dist-cat-label">耗时</span><span class="dist-cat-value orange">${log.duration ?? '-'}ms</span>`];
+
+  // SSE帧数
   if (sseStats?.frameCount > 0) {
-    html += `<div class="dist-category">
-      <div class="dist-cat-label">SSE帧数</div>
-      <div class="dist-cat-value">${sseStats.frameCount}</div>
-    </div>`;
+    metaParts.push(`<span class="dist-meta-sep">·</span><span class="dist-cat-label">SSE帧数</span><span class="dist-cat-value">${sseStats.frameCount}</span>`);
   }
-  if (sseStats?.usage) {
-    html += `<div class="dist-category">
-      <div class="dist-cat-label">实际Token</div>
-      <div class="dist-cat-value green">${JSON.stringify(sseStats.usage)}</div>
-    </div>`;
+
+  // 消息长度
+  const msgCount = messages.length;
+  if (msgCount > 0) {
+    metaParts.push(`<span class="dist-meta-sep">·</span><span class="dist-cat-label">消息长度</span><span class="dist-cat-value">${msgCount}</span>`);
   }
-  html += '</div>';
+
+  // 工具调用次数（统计 messages 中的 tool_result，代表已完成的调用）
+  let toolCallCount = 0;
+  messages.forEach(m => {
+    if (Array.isArray(m.content)) {
+      toolCallCount += m.content.filter(b => b.type === 'tool_result').length;
+    }
+  });
+  if (toolCallCount > 0) {
+    metaParts.push(`<span class="dist-meta-sep">·</span><span class="dist-cat-label">工具调用</span><span class="dist-cat-value">${toolCallCount}</span>`);
+  }
+
+  // Token速率 (token/s)
+  const outTokens = usage?.output_tokens || 0;
+  const durationSec = (log.duration || 0) / 1000;
+  if (outTokens > 0 && durationSec > 0) {
+    const rate = Math.round(outTokens / durationSec);
+    metaParts.push(`<span class="dist-meta-sep">·</span><span class="dist-cat-label">Token速率</span><span class="dist-cat-value green">${rate} token/s</span>`);
+  }
+
+  html += `<div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a">
+    <div class="dist-meta-line">${metaParts.join('')}</div>
+  </div>`;
 
   html += '</div>';
   return html;
+}
+
+// 渲染 content：字符串或 content block 数组
+function renderRequestContent(content) {
+  if (!content) return '<div class="message-content">(空)</div>';
+  if (typeof content === 'string') {
+    return `<div class="message-content">${escapeHtml(content)}</div>`;
+  }
+  if (!Array.isArray(content)) {
+    return `<div class="message-content">${escapeHtml(getText(content))}</div>`;
+  }
+  return content.map((block, index) => {
+    const type = block.type || 'block';
+    const text = block.text ?? block.thinking ?? block.input ?? block.content ?? '';
+    const preview = typeof text === 'string' ? text : getText(text);
+    return `<div class="message-block" style="margin-bottom:6px">
+      <div class="message-role"><span>${escapeHtml(type)}</span></div>
+      <div class="message-content">${escapeHtml(preview)}</div>
+    </div>`;
+  }).join('');
 }
 
 function renderFriendlyRequest(request) {
   if (!request) return '';
   let html = '<div class="friendly-section"><div class="friendly-title">请求详情</div>';
 
-  // 模型信息
   if (request.model) {
-    html += `<div class="friendly-row"><div class="friendly-label">模型</div><div class="friendly-value blue">${request.model}</div></div>`;
+    html += `<div class="friendly-row"><div class="friendly-label">模型</div><div class="friendly-value blue">${escapeHtml(request.model)}</div></div>`;
   }
 
-  // 消息列表（倒序，最新在上边）
+  const scalarFields = [
+    ['max_tokens', '最大 Token'],
+    ['temperature', '温度'],
+    ['stream', '流式'],
+    ['tool_choice', '工具选择'],
+  ];
+  for (const [key, label] of scalarFields) {
+    if (request[key] !== undefined && request[key] !== null) {
+      const display = typeof request[key] === 'object' ? JSON.stringify(request[key]) : String(request[key]);
+      html += `<div class="friendly-row"><div class="friendly-label">${label}</div><div class="friendly-value">${escapeHtml(display)}</div></div>`;
+    }
+  }
+
+  if (request.tools && request.tools.length > 0) {
+    const toolNames = request.tools.map((tool) => tool.name || tool.type || '?').join(', ');
+    html += `<div class="friendly-row"><div class="friendly-label">工具</div><div class="friendly-value">${request.tools.length} 个 · ${escapeHtml(toolNames)}</div></div>`;
+  }
+
+  // 不显示 system
+  // if (request.system !== undefined && request.system !== null) { ... }
+
   if (request.messages && request.messages.length > 0) {
     html += `<div class="friendly-row"><div class="friendly-label">消息数</div><div class="friendly-value">${request.messages.length} 条</div></div>`;
     const reversedMsgs = [...request.messages].reverse();
     reversedMsgs.forEach((msg, idx) => {
       const role = msg.role || 'unknown';
-      const content = getText(msg.content);
       const actualIdx = request.messages.length - idx;
       html += `<div class="message-block">
-        <div class="message-role"><span>${role}</span><span style="float:right;color:#555">#${actualIdx}</span></div>
-        <div class="message-content">${escapeHtml(content)}</div>
+        <div class="message-role"><span>${escapeHtml(role)}</span><span style="float:right;color:#555">#${actualIdx}</span></div>
+        ${renderRequestContent(msg.content)}
       </div>`;
     });
   }
@@ -1479,7 +1728,13 @@ function renderFriendlyResponse(response) {
     }
 
     if (sseStats.usage) {
-      html += `<div class="friendly-row"><div class="friendly-label">Token 使用</div><div class="friendly-value highlight">${JSON.stringify(sseStats.usage)}</div></div>`;
+      const u = sseStats.usage;
+      const parts = [];
+      if (u.input_tokens !== undefined) parts.push(`输入: ${u.input_tokens}`);
+      if (u.output_tokens !== undefined) parts.push(`输出: ${u.output_tokens}`);
+      if (u.cache_read_input_tokens !== undefined) parts.push(`缓存: ${u.cache_read_input_tokens}`);
+      if (u.cache_creation_input_tokens !== undefined) parts.push(`缓存创建: ${u.cache_creation_input_tokens}`);
+      html += `<div class="friendly-row"><div class="friendly-label">Token 使用</div><div class="friendly-value highlight" style="word-break:break-all">${parts.join(' · ')}</div></div>`;
     }
 
   } else if (response.choices) {
@@ -1535,10 +1790,13 @@ function renderDetailContent(log) {
   const mode = viewModes[log.id] || 'friendly';
   let html = '';
 
-  // 视图切换按钮
-  html += `<div class="view-toggle">
-    <button class="view-btn ${mode === 'friendly' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'friendly'); event.stopPropagation();">友好视图</button>
-    <button class="view-btn ${mode === 'raw' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'raw'); event.stopPropagation();">原始数据</button>
+  // 视图切换按钮 + 复制按钮（原始数据时显示）
+  html += `<div class="view-toggle" style="justify-content:space-between">
+    <div style="display:flex;gap:8px">
+      <button class="view-btn ${mode === 'friendly' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'friendly'); event.stopPropagation();">友好视图</button>
+      <button class="view-btn ${mode === 'raw' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'raw'); event.stopPropagation();">原始数据</button>
+    </div>
+    ${mode === 'raw' ? `<button class="btn" onclick="copyRawData(${log.id})" style="padding:4px 10px;font-size:12px">拷贝数据</button>` : ''}
   </div>`;
 
   if (log.error) {
@@ -1562,11 +1820,57 @@ function renderDetailContent(log) {
     if (log.request) {
       html += `<div class="detail-section">
         <div class="detail-label">请求</div>
-        <div class="detail-json">${escapeHtml(JSON.stringify(log.request, null, 2))}</div>
+        <div class="detail-json request-json">${escapeHtml(JSON.stringify(log.request, null, 2))}</div>
       </div>`;
     }
   }
 
+  return html;
+}
+
+// 复制原始数据（完整拷贝，不做加工）
+function copyRawData(logId) {
+  const log = window.currentLogs?.find(l => l.id === logId);
+  if (!log) return;
+  const text = JSON.stringify(log, null, 2);
+  navigator.clipboard.writeText(text).then(() => {
+    // 简单提示
+    const btn = document.querySelector('.panel-body .btn');
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = '已复制!';
+      btn.style.color = '#059669';
+      setTimeout(() => {
+        btn.textContent = original;
+        btn.style.color = '';
+      }, 1500);
+    }
+  }).catch(err => {
+    alert('复制失败: ' + err);
+  });
+}
+
+// 渲染单个日志卡片
+function renderSingleLogCard(log) {
+  const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
+
+  let html = `<div class="log-card" data-log-id="${log.id}">`;
+
+  // 头部信息
+  html += `<div class="log-header">
+    <div class="log-time">${splitTime(log.time)}</div>
+    <div class="log-method ${log.method}">${log.method}</div>
+    <div class="log-path">${log.path}</div>
+    <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
+    <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
+  </div>`;
+
+  // 横向分布条占位（POST 请求延迟渲染）
+  if (log.method === 'POST') {
+    html += `<div class="dist-bar-wrap dist-bar-placeholder" data-log-id="${log.id}"><div class="dist-header"><div class="dist-model">加载中...</div></div></div>`;
+  }
+
+  html += `</div>`;
   return html;
 }
 
@@ -1589,7 +1893,7 @@ function renderLogs(logs) {
   for (const log of reversed) {
     const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
 
-    html += `<div class="log-card">`;
+    html += `<div class="log-card" data-log-id="${log.id}">`;
 
     // 头部信息
     html += `<div class="log-header">
@@ -1597,24 +1901,60 @@ function renderLogs(logs) {
       <div class="log-method ${log.method}">${log.method}</div>
       <div class="log-path">${log.path}</div>
       <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
-      <div class="log-duration">${log.duration ? log.duration + 'ms' : '-'}</div>
       <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
     </div>`;
 
-    // 横向分布条
+    // 横向分布条占位（POST 请求延迟渲染）
     if (log.method === 'POST') {
-      try {
-        html += `<div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
-      } catch (e) {
-        console.error('buildDistBar error:', e);
-        html += `<div class="dist-bar-wrap"><div class="dist-header"><div class="dist-model">解析错误</div></div></div>`;
-      }
+      html += `<div class="dist-bar-wrap dist-bar-placeholder" data-log-id="${log.id}"><div class="dist-header"><div class="dist-model">加载中...</div></div></div>`;
     }
 
     html += `</div>`;
   }
 
   container.innerHTML = html;
+
+  // 逐个异步渲染分布条，避免首次加载卡顿
+  renderDistBarsProgressively(logs, container);
+}
+
+// 异步逐个渲染分布条
+function renderDistBarsProgressively(logs, container) {
+  const placeholders = container.querySelectorAll('.dist-bar-placeholder');
+  const items = [];
+
+  placeholders.forEach(el => {
+    const logId = parseInt(el.dataset.logId);
+    const log = logs.find(l => l.id === logId);
+    if (log) {
+      items.push({ el, log });
+    }
+  });
+
+  if (items.length === 0) return;
+
+  let index = 0;
+  function renderNext() {
+    if (index >= items.length) return;
+    const { el, log } = items[index];
+    try {
+      el.outerHTML = `<div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
+    } catch (e) {
+      console.error('buildDistBar error:', e);
+    }
+    index++;
+    if (index < items.length) {
+      // 使用 requestIdleCallback 或 setTimeout 间隔渲染
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(() => renderNext(), { timeout: 50 });
+      } else {
+        setTimeout(renderNext, 30);
+      }
+    }
+  }
+
+  // 首个延迟一点渲染，让页面先稳定
+  setTimeout(renderNext, 100);
 }
 
 function toggleDetail(logId) {
@@ -1882,22 +2222,8 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
     }
   };
 
-  // 计算所有消息的总 token（用于比例）
-  let totalTokens = 0;
-  const tokenCounts = [];
-  for (let i = 0; i < maxLen; i++) {
-    const curr = currentMsgs[i];
-    const prev = prevMsgs[i];
-    const maxTokens = Math.max(
-      curr ? countTokens(curr.content) : 0,
-      prev ? countTokens(prev.content) : 0
-    );
-    tokenCounts.push(maxTokens);
-    totalTokens += maxTokens;
-  }
-
-  // minimap 可用高度（扣除 padding）
-  const minimapAvailableHeight = window.innerHeight - 80; // header 48px + padding 16px*2
+  // 每个消息占 minimap 的百分比高度
+  const heightPerMsg = 100 / maxLen;
 
   for (let i = 0; i < maxLen; i++) {
     const curr = currentMsgs[i];
@@ -1922,9 +2248,9 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
     // 索引从 1 开始
     const displayIndex = i + 1;
 
-    // 计算 minimap 高度（按 token 比例，最小 6px）
-    const heightPct = tokenCounts[i] / totalTokens;
-    const itemHeight = Math.max(6, Math.round(heightPct * minimapAvailableHeight));
+    // minimap 百分比位置：topPct = i / maxLen * 100, heightPct = 100 / maxLen
+    const topPct = (i / maxLen) * 100;
+    const heightPct = heightPerMsg;
 
     // Token diff 计算（只在有差异时）
     let tokenDiffResult = null;
@@ -1938,7 +2264,7 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
 
     leftHtml += renderDiffMessage(prev, displayIndex, prevTokens, status === 'removed' ? 'removed' : status === 'diff' ? 'diff' : 'same', 0, tokenDiffResult?.tokensA);
     rightHtml += renderDiffMessage(curr, displayIndex, currTokens, status === 'added' ? 'added' : status === 'diff' ? 'diff' : 'same', tokenDiff, tokenDiffResult?.tokensB);
-    minimapHtml += renderMinimapItem(displayIndex, status, itemHeight);
+    minimapHtml += renderMinimapItem(displayIndex, status, topPct, heightPct);
   }
 
   leftPanel.innerHTML = leftHtml || '<div style="color:#666;padding:20px">无消息</div>';
@@ -1949,12 +2275,12 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
   initDiffScroll();
 }
 
-function renderMinimapItem(index, status, height) {
+function renderMinimapItem(index, status, topPct, heightPct) {
   const statusClass = status === 'same' ? 'diff-minimap-same' :
                       status === 'added' ? 'diff-minimap-added' :
                       status === 'removed' ? 'diff-minimap-removed' : 'diff-minimap-diff';
 
-  return `<div class="diff-minimap-item ${statusClass}" style="height:${height}px" data-index="${index}" onclick="scrollToDiffMessage(${index})"></div>`;
+  return `<div class="diff-minimap-item ${statusClass}" style="top:${topPct}%;height:${heightPct}%" data-index="${index}" onclick="scrollToDiffMessage(${index})"></div>`;
 }
 
 function renderDiffMessage(msg, index, tokens, status, tokenDiff = 0, tokenDiffTokens = null) {
@@ -1998,25 +2324,22 @@ function scrollToDiffMessage(index) {
   if (leftMsg || rightMsg) {
     // 计算滚动位置（消息顶部对齐）
     const targetTop = (leftMsg?.offsetTop || rightMsg?.offsetTop || 0) - 20;
-    const maxScroll = Math.max(
-      leftPanel.scrollHeight - leftPanel.clientHeight,
-      rightPanel.scrollHeight - rightPanel.clientHeight
-    );
 
     // 同时滚动两个面板
     leftPanel.scrollTop = targetTop;
     rightPanel.scrollTop = targetTop;
 
-    // 更 minimap 视口位置
+    // 更新 minimap 视口位置（基于消息索引，与 minimap item 均匀布局匹配）
     const minimapItems = document.getElementById('diffMinimapItems');
     const viewport = document.getElementById('diffMinimapViewport');
+    const messages = leftPanel.querySelectorAll('.diff-message');
+    const totalMsgs = messages.length;
 
-    // 根据滚动比例更新视口
-    const ratio = Math.min(1, Math.max(0, targetTop / maxScroll));
-    const minimapHeight = minimapItems.clientHeight;
-    const viewportHeight = viewport.clientHeight;
+    // viewport 位置对应当前消息在 minimap 中的位置
+    const msgIdx = index - 1; // index 从 1 开始
+    const topPct = (msgIdx / totalMsgs) * 100;
 
-    viewport.style.top = (8 + ratio * (minimapHeight - viewportHeight)) + 'px';
+    viewport.style.top = (8 + (topPct / 100) * (minimapItems.clientHeight - viewport.clientHeight)) + 'px';
   }
 }
 
@@ -2115,8 +2438,6 @@ function initDiffScroll() {
   // 初始化
   updateByRatio(0);
 }
-
-function initDiffDrag() {}
 </script>
 
 </body>

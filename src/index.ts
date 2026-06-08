@@ -86,6 +86,9 @@ let G_ProviderConfig : ProviderConfig = {
     apiPath: null,
 }
 
+// 网页用量条上下文上限（token）
+let G_ContextLength = 200_000;
+
 // API 路径配置
 const ANTHROPIC_API_PATH: AgentApiConfig = { chat: "/v1/messages", tags: "/v1/models" };
 const OPENAI_API_PATH: AgentApiConfig = { chat: "/v1/chat/completions", tags: "/v1/models" };
@@ -188,7 +191,7 @@ async function proxyChatRequest(c: any, routePath: string) {
                         model: chooseModel,
                         duration,
                         status: res.status,
-                        request: { model: chooseModel, messages: body.messages },
+                        request: body,
                         response: responseBody,
                     });
                 })
@@ -201,7 +204,7 @@ async function proxyChatRequest(c: any, routePath: string) {
                         model: chooseModel,
                         duration: Date.now() - startTime,
                         status: res.status,
-                        request: { model: chooseModel, messages: body.messages },
+                        request: body,
                         error: String(error),
                     });
                 });
@@ -231,7 +234,7 @@ async function proxyChatRequest(c: any, routePath: string) {
             model: chooseModel,
             duration,
             status: res.status,
-            request: { model: chooseModel, messages: body.messages },
+            request: body,
             response: responseBody,
         });
 
@@ -250,7 +253,7 @@ async function proxyChatRequest(c: any, routePath: string) {
             model: chooseModel,
             duration,
             status: 500,
-            request: { model: chooseModel, messages: body.messages },
+            request: body,
             error: String(e),
         });
         return c.json({ error: String(e) }, 500);
@@ -278,6 +281,7 @@ app.get("/api/info", (c) => c.json({
     provider: G_ProviderConfig.name,
     baseUrl: G_ProviderConfig.baseUrl,
     apiKeyMasked: Utils.maskSecret(G_ProviderConfig.apikey),
+    contextLength: G_ContextLength,
 }));
 
 // 获取请求日志
@@ -481,11 +485,17 @@ async function main() {
                 type: "boolean",
                 description: "启动后自动打开浏览器",
             })
+            .option("max_context", {
+                type: "number",
+                description: "网页上下文长度上限（token）",
+                default: 200_000,
+            })
             .epilog(providerPresetDemo)
             .parse();
     const port = cli.port ?? 11434;
     const host = cli.host ?? "localhost";
     Utils.setObjectDumpQuiet(cli.quiet ?? false);
+    G_ContextLength = cli.max_context;
     serve(
         {
             fetch: app.fetch,
@@ -531,6 +541,7 @@ async function main() {
     G_ProviderConfig.name = processProviderName(G_ProviderConfig.baseUrl);
     G_ProviderConfig.apiPath = processApiPath(G_ProviderConfig.baseUrl);
     console.log(`上游服务商配置:\n${G_ProviderConfig.name}, ${G_ProviderConfig.baseUrl}, ${Utils.maskSecret(G_ProviderConfig.apikey)}`);
+    console.log(`网页上下文上限: ${G_ContextLength} tokens`);
     Utils.dumpObject("ApiPathConfig", G_ProviderConfig.apiPath);
 }
 

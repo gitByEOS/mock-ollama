@@ -91,7 +91,9 @@ export class Utils {
         }
         if (trimmedText.startsWith("{") || trimmedText.startsWith("[")) {
             try {
-                return JSON.parse(text) as unknown;
+                const parsed = JSON.parse(text) as Record<string, unknown>;
+                const toolCalls = this.extractToolCallsFromResponse(parsed);
+                return toolCalls.length > 0 ? { ...parsed, toolCalls } : parsed;
             } catch {
                 return {
                     format: "invalid-json",
@@ -170,6 +172,11 @@ export class Utils {
             ...(summary.stopReason !== undefined ? { stopReason: summary.stopReason } : {}),
             ...(thinking ? { thinking: this.truncateForSseLog(thinking) } : {}),
             ...(text ? { assistantText: this.truncateForSseLog(text) } : {}),
+            ...(summary.toolCalls.length > 0 ? { toolCalls: summary.toolCalls.map(tc => ({
+                name: tc.name,
+                ...(tc.id ? { id: tc.id } : {}),
+                input: this.parseToolInput(tc.inputJson),
+            })) } : {}),
             tail: records.slice(-5).map((record) => ({
                 sseEvent: record.sseEvent,
                 dataType: this.ssePayloadDataType(record.parsed),
@@ -186,6 +193,8 @@ export class Utils {
         let stopReason: unknown;
         const thinking: string[] = [];
         const text: string[] = [];
+        const toolCalls: Array<{ name: string; id?: string; inputJson: string }> = [];
+        let currentToolCall: { name: string; id?: string; inputJson: string } | null = null;
 
         for (const { sseEvent, parsed } of records) {
             sseEventCounts[sseEvent] = (sseEventCounts[sseEvent] ?? 0) + 1;
@@ -238,12 +247,34 @@ export class Utils {
                     if (detail.type === "text_delta" && typeof detail.text === "string" && detail.text.trim().length > 0) {
                         text.push(detail.text);
                     }
+                    if (detail.type === "input_json_delta" && typeof detail.partial_json === "string" && currentToolCall) {
+                        currentToolCall.inputJson += detail.partial_json;
+                    }
+                    break;
+                }
+                case "content_block_start": {
+                    const block = data.content_block;
+                    if (block && typeof block === "object" && (block as Record<string, unknown>).type === "tool_use") {
+                        const detail = block as Record<string, unknown>;
+                        currentToolCall = {
+                            name: typeof detail.name === "string" ? detail.name : "unknown",
+                            ...(typeof detail.id === "string" ? { id: detail.id } : {}),
+                            inputJson: "",
+                        };
+                    }
+                    break;
+                }
+                case "content_block_stop": {
+                    if (currentToolCall) {
+                        toolCalls.push(currentToolCall);
+                        currentToolCall = null;
+                    }
                     break;
                 }
             }
         }
 
-        return { sseEventCounts, dataTypeCounts, message, usage, stopReason, thinking, text };
+        return { sseEventCounts, dataTypeCounts, message, usage, stopReason, thinking, text, toolCalls };
     }
 
     private static truncateForSseLog(text: string): string {
@@ -251,6 +282,52 @@ export class Utils {
             return text;
         }
         return `${text.slice(0, this.SSE_LOG_TEXT_MAX)}…(全文${text.length}字，已截断)`;
+    }
+
+    /** 解析工具调用参数 JSON，失败则截断原文 */
+    private static parseToolInput(inputJson: string): unknown {
+        if (!inputJson) return null;
+        try {
+            return JSON.parse(inputJson);
+        } catch {
+            const max = 200;
+            return inputJson.length > max ? inputJson.slice(0, max) + "…" : inputJson;
+        }
+    }
+
+    /** 从已解析的 SSE 摘要或普通 JSON 响应中提取 tool_calls */
+    private static extractToolCallsFromResponse(response: Record<string, unknown>): Array<{ name: string; input: unknown }> {
+        // SSE 格式已带 toolCalls，直接返回
+        if (Array.isArray(response.toolCalls)) {
+            return response.toolCalls as Array<{ name: string; input: unknown }>;
+        }
+        // OpenAI 兼容：choices[0].message.tool_calls
+        const choices = response.choices;
+        if (Array.isArray(choices) && choices.length > 0) {
+            const msg = (choices[0] as Record<string, unknown>)?.message;
+            if (msg && Array.isArray((msg as Record<string, unknown>).tool_calls)) {
+                return ((msg as Record<string, unknown>).tool_calls as Array<Record<string, unknown>>)
+                    .map(tc => {
+                        const fn = (tc.function ?? tc) as Record<string, unknown>;
+                        let input: unknown = fn.arguments;
+                        if (typeof input === "string") {
+                            try { input = JSON.parse(input); } catch { /* keep raw */ }
+                        }
+                        return { name: String(fn.name ?? "unknown"), input };
+                    });
+            }
+        }
+        // Anthropic 非流式：content[].type === "tool_use"
+        const content = response.content;
+        if (Array.isArray(content)) {
+            return content
+                .filter(b => b && typeof b === "object" && (b as Record<string, unknown>).type === "tool_use")
+                .map(b => {
+                    const block = b as Record<string, unknown>;
+                    return { name: String(block.name ?? "unknown"), input: block.input ?? null };
+                });
+        }
+        return [];
     }
 
     private static ssePayloadDataType(parsed: unknown): unknown {

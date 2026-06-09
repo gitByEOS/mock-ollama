@@ -393,6 +393,7 @@ body {
 /* 请求段颜色 */
 .seg-user        { background: #2563eb; }
 .seg-assistant   { background: #7c3aed; }
+.seg-system      { background: #9ca3af; }
 
 /* 响应段颜色 */
 .seg-thinking    { background: #7c3aed; }
@@ -1477,10 +1478,13 @@ function buildDistBar(log) {
     html += '<div class="dist-cat-label" style="margin-bottom:8px;color:#666">Messages</div>';
   }
 
+  // 进度条宽度：直接用百分比，最小 5%
+  const barWidth = (pct) => Math.max(5, Math.min(100, pct));
+
   if (systemTokens > 0) {
     html += `<div class="dist-category">
       <div class="dist-cat-label">System</div>
-      <div class="dist-cat-bar"><div class="dist-cat-fill seg-system" style="width:${Math.min(100, systemPct * 10)}%"></div></div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-system" style="width:${barWidth(systemPct)}%"></div></div>
       <div class="dist-cat-value">${fmtTokens(systemTokens)} (${fmtPct(systemPct)}%)</div>
     </div>`;
   }
@@ -1488,7 +1492,7 @@ function buildDistBar(log) {
   if (assistantTokens > 0) {
     html += `<div class="dist-category">
       <div class="dist-cat-label">Assistant</div>
-      <div class="dist-cat-bar"><div class="dist-cat-fill seg-assistant" style="width:${Math.min(100, assistantPct * 10)}%"></div></div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-assistant" style="width:${barWidth(assistantPct)}%"></div></div>
       <div class="dist-cat-value purple">${fmtTokens(assistantTokens)} (${fmtPct(assistantPct)}%)</div>
     </div>`;
   }
@@ -1496,7 +1500,7 @@ function buildDistBar(log) {
   if (userTokens > 0) {
     html += `<div class="dist-category">
       <div class="dist-cat-label">User</div>
-      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${Math.min(100, userPct * 10)}%"></div></div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${barWidth(userPct)}%"></div></div>
       <div class="dist-cat-value blue">${fmtTokens(userTokens)} (${fmtPct(userPct)}%)</div>
     </div>`;
   }
@@ -1515,12 +1519,12 @@ function buildDistBar(log) {
 
     html += `<div class="dist-category ${cacheClass}">
       <div class="dist-cat-label">Cache</div>
-      <div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${Math.min(100, cachePct)}%"></div></div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${barWidth(cachePct)}%"></div></div>
       <div class="dist-cat-value cache">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)${cacheDecreased ? `<span style="color:#dc2626"> ↓${fmtTokens(prevCacheTokens - cacheTokens)}</span>` : ''}</div>
     </div>`;
     html += `<div class="dist-category">
       <div class="dist-cat-label">Input</div>
-      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${Math.min(100, inputPct)}%"></div></div>
+      <div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${barWidth(inputPct)}%"></div></div>
       <div class="dist-cat-value blue">${fmtTokens(actualInput)} (${fmtPct(inputPct)}%)</div>
     </div>`;
   }
@@ -1579,6 +1583,27 @@ function buildDistBar(log) {
         <div class="message-content" style="font-size:13px;color:#e0e0e0;width:100%;white-space:pre-wrap">${escapeHtml(responseText)}</div>
       </div>`;
     }
+
+    html += '</div>';
+  }
+
+  // === 本轮工具调用（只显示 response 里的新调用） ===
+  const recentToolCalls = [];
+
+  // 只从 response 提取本轮 tool_use
+  if (log.response?.toolCalls && log.response.toolCalls.length > 0) {
+    recentToolCalls.push(...log.response.toolCalls);
+  }
+
+  if (recentToolCalls.length > 0) {
+    html += `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:12px;padding-top:12px;border-top:1px solid #2a2a2a">
+      <div class="dist-cat-label" style="color:#e89d3a;margin-bottom:8px">Tool Calls</div>`;
+    // 倒序显示（最新的先显示）
+    for (const tc of recentToolCalls.reverse()) {
+      const inputStr = typeof tc.input === 'object' ? JSON.stringify(tc.input) : String(tc.input ?? '');
+      const inputPreview = inputStr.length > 300 ? inputStr.slice(0, 300) + '…' : inputStr;
+      html += `<div class="message-content" style="font-size:12px;color:#e0e0e0;width:100%;white-space:pre-wrap;margin-top:4px"><span style="color:#e89d3a">${escapeHtml(tc.name)}</span>: ${escapeHtml(inputPreview)}</div>`;
+    }
     html += '</div>';
   }
 
@@ -1596,11 +1621,11 @@ function buildDistBar(log) {
     metaParts.push(`<span class="dist-meta-sep">·</span><span class="dist-cat-label">消息长度</span><span class="dist-cat-value">${msgCount}</span>`);
   }
 
-  // 工具调用次数（统计 messages 中的 tool_result，代表已完成的调用）
+  // 工具调用次数（统计 messages 中 assistant 的 tool_use）
   let toolCallCount = 0;
   messages.forEach(m => {
-    if (Array.isArray(m.content)) {
-      toolCallCount += m.content.filter(b => b.type === 'tool_result').length;
+    if (m.role === 'assistant' && Array.isArray(m.content)) {
+      toolCallCount += m.content.filter(b => b.type === 'tool_use').length;
     }
   });
   if (toolCallCount > 0) {
@@ -1807,6 +1832,40 @@ function renderDetailContent(log) {
     // 好友视图 - 响应在前，请求在后（倒序）
     html += `<div class="friendly-view">`;
     html += renderFriendlyResponse(log.response);
+
+    // === 工具调用统计（所有历史） ===
+    const toolCallStats = {};
+    const request = log.request;
+    if (request && request.messages && Array.isArray(request.messages)) {
+      request.messages.forEach(m => {
+        if (m.role === 'assistant' && Array.isArray(m.content)) {
+          m.content.forEach(block => {
+            if (block.type === 'tool_use') {
+              const name = block.name || 'unknown';
+              toolCallStats[name] = (toolCallStats[name] || 0) + 1;
+            }
+          });
+        }
+      });
+    }
+    // 也统计 response 里的 toolCalls
+    if (log.response?.toolCalls && log.response.toolCalls.length > 0) {
+      log.response.toolCalls.forEach(tc => {
+        const name = tc.name || 'unknown';
+        toolCallStats[name] = (toolCallStats[name] || 0) + 1;
+      });
+    }
+
+    const toolNames = Object.keys(toolCallStats);
+    if (toolNames.length > 0) {
+      const totalCount = toolNames.reduce((sum, name) => sum + toolCallStats[name], 0);
+      const statsStr = toolNames.map(name => `${name} x${toolCallStats[name]}`).join(', ');
+      html += `<div class="friendly-section"><div class="friendly-title">工具调用统计</div>`;
+      html += `<div class="friendly-row"><div class="friendly-label">总次数</div><div class="friendly-value orange">${totalCount}</div></div>`;
+      html += `<div class="friendly-row"><div class="friendly-label">分布</div><div class="friendly-value">${escapeHtml(statsStr)}</div></div>`;
+      html += '</div>';
+    }
+
     html += renderFriendlyRequest(log.request);
     html += `</div>`;
   } else {

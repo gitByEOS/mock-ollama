@@ -72,6 +72,7 @@ mock-ollama --url <上游地址> --apikey <上游密钥>
 - `--port`：监听端口，默认 `11434`
 - `--url`：上游服务地址
 - `--apikey`：上游服务密钥
+- `--api-style`：上游 API 风格，支持 `auto`、`anthropic`、`openai`，默认 `auto`
 - `--quiet`：安静模式，关闭详细日志
 - `--open`：启动后自动打开浏览器
 - `--max_context`：网页上下文上限（token），默认 `200000`
@@ -87,6 +88,12 @@ mock-ollama --url <上游地址> --apikey <上游密钥>
 export MOCK_OLLAMA_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
 export MOCK_OLLAMA_API_KEY="your-api-key"
 mock-ollama
+```
+
+强制使用 Anthropic 兼容接口：
+
+```bash
+mock-ollama --url "https://api.example.com" --apikey "your-key" --api-style anthropic
 ```
 
 ## 路由接口

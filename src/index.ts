@@ -33,11 +33,13 @@ type AgentApiConfig = {
     chat: string;
     tags: string;
 }
+type ApiStyle = "auto" | "anthropic" | "openai";
 type ProviderConfig = {
     name: ProviderName;
     baseUrl: string;
     apikey: string;
     apiPath: AgentApiConfig | null;
+    apiStyle: ApiStyle;
 }
 
 type LogEntry = {
@@ -84,6 +86,7 @@ let G_ProviderConfig : ProviderConfig = {
     baseUrl: "",
     apikey: "",
     apiPath: null,
+    apiStyle: "auto",
 }
 
 // 网页用量条上下文上限（token）
@@ -117,13 +120,26 @@ function processProviderName(baseUrl: string): ProviderName {
     return "unknown";
 }
 
-function processApiPath(baseUrl: string): AgentApiConfig {
+function processApiPath(baseUrl: string, apiStyle: ApiStyle): AgentApiConfig {
+    if (apiStyle === "anthropic") {
+        return ANTHROPIC_API_PATH;
+    }
+    if (apiStyle === "openai") {
+        return OPENAI_API_PATH;
+    }
     // Anthropic 兼容
     if (baseUrl.includes("anthropic") || baseUrl.includes("/anthropic")) {
         return ANTHROPIC_API_PATH;
     }
     // 默认 OpenAI 兼容
     return OPENAI_API_PATH;
+}
+
+function parseApiStyle(value: unknown): ApiStyle {
+    if (value === "anthropic" || value === "openai" || value === "auto") {
+        return value;
+    }
+    return "auto";
 }
 
 function buildRequestHeaders(headers: HeadersInit) {
@@ -477,7 +493,12 @@ async function main() {
                 type: "string",
                 description: "上游服务商 url，或者export MOCK_OLLAMA_BASE_URL",
             })
-                        .option("quiet", {
+            .option("api-style", {
+                type: "string",
+                choices: ["auto", "anthropic", "openai"],
+                description: "上游 API 风格，默认 auto",
+            })
+            .option("quiet", {
                 type: "boolean",
                 description: "安静模式",
             })
@@ -525,6 +546,7 @@ async function main() {
 
     G_ProviderConfig.baseUrl = cli.url ?? process.env.MOCK_OLLAMA_BASE_URL ?? "";
     G_ProviderConfig.apikey = cli.apikey ?? process.env.MOCK_OLLAMA_API_KEY ?? "";
+    G_ProviderConfig.apiStyle = parseApiStyle(cli.apiStyle);
 
     if (G_ProviderConfig.baseUrl.length === 0 || G_ProviderConfig.apikey.length === 0) {
         console.error("上游服务商配置错误，请检查命令行参数或环境变量");
@@ -539,8 +561,8 @@ async function main() {
     }
 
     G_ProviderConfig.name = processProviderName(G_ProviderConfig.baseUrl);
-    G_ProviderConfig.apiPath = processApiPath(G_ProviderConfig.baseUrl);
-    console.log(`上游服务商配置:\n${G_ProviderConfig.name}, ${G_ProviderConfig.baseUrl}, ${Utils.maskSecret(G_ProviderConfig.apikey)}`);
+    G_ProviderConfig.apiPath = processApiPath(G_ProviderConfig.baseUrl, G_ProviderConfig.apiStyle);
+    console.log(`上游服务商配置:\n${G_ProviderConfig.name}, ${G_ProviderConfig.apiStyle}, ${G_ProviderConfig.baseUrl}, ${Utils.maskSecret(G_ProviderConfig.apikey)}`);
     console.log(`网页上下文上限: ${G_ContextLength} tokens`);
     Utils.dumpObject("ApiPathConfig", G_ProviderConfig.apiPath);
 }

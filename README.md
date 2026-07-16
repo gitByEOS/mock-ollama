@@ -4,9 +4,11 @@
 
 当前主要用途：
 
-- 代理 OpenAI/Anthropic 兼容聊天接口
-- 暴露 Ollama 风格的 `api/version`、`api/tags`、`api/show`
+- 代理 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses 接口
+- 暴露 Ollama 风格的 discovery/metadata 接口：`/api/version`、`/api/tags`、`/api/show`
 - Web UI 实时监控请求日志、Token 分布、Cache 命中
+
+Ollama 兼容范围仅限上述 discovery/metadata 接口；不支持 Ollama 的 `/api/chat` 和 `/api/generate`。聊天请求请使用下文列出的 Chat Completions、Messages 或 Responses 路由。
 
 ## 安装
 
@@ -26,10 +28,10 @@ npm run dev
 
 ## 快速开始
 
-最常见的是把它指到一个 OpenAI 兼容上游，比如 GLM:
+最常见的是把它指到一个 OpenAI 兼容上游，比如 GLM：
 
 ```bash
-export MOCK_OLLAMA_BASE_URL="open.bigmodel.cn/api/paas/v4"
+export MOCK_OLLAMA_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
 export MOCK_OLLAMA_API_KEY="your-api-key"
 mock-ollama
 ```
@@ -72,7 +74,8 @@ mock-ollama --url <上游地址> --apikey <上游密钥>
 - `--port`：监听端口，默认 `11434`
 - `--url`：上游服务地址
 - `--apikey`：上游服务密钥
-- `--api-style`：上游 API 风格，支持 `auto`、`anthropic`、`openai`，默认 `auto`
+- `--api-style`：上游 API 格式，支持 `auto`、`anthropic`、`responses`、`chat`，默认 `auto` 自动探测
+- `--bridge`：启用 Anthropic/Responses/Chat 三格式矩阵互转，默认关闭
 - `--quiet`：安静模式，关闭详细日志
 - `--open`：启动后自动打开浏览器
 - `--max_context`：网页上下文上限（token），默认 `200000`
@@ -96,15 +99,41 @@ mock-ollama
 mock-ollama --url "https://api.example.com" --apikey "your-key" --api-style anthropic
 ```
 
+## bridge 矩阵互转模式
+
+`--bridge` 开启后，入站协议与上游协议不同时自动互转，覆盖 Anthropic Messages / OpenAI Responses / Chat Completions 三格式的 3×3 矩阵（同格式则透传）。支持文本、SSE 流、工具调用、system 消息、reasoning。
+
+```bash
+mock-ollama --api-style responses --bridge --url "https://api.example.com/v1" --apikey "your-key"
+```
+
+在兼容 Anthropic 协议的客户端配置文件中，可设置：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:11434",
+    "ANTHROPIC_AUTH_TOKEN": "ollama",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+```
+
 ## 路由接口
 
-- `GET /`
-- `GET /api/version`
-- `GET /api/tags`
-- `POST /api/show`
-- `POST /chat/completions`
-- `POST /v1/chat/completions`
-- `POST /v1/messages`
+- `GET /`：Web UI
+- `GET /api/version`：Ollama discovery/metadata
+- `GET /api/info`：当前服务配置（密钥脱敏）
+- `GET /api/logs`：请求日志
+- `DELETE /api/logs`：清空请求日志
+- `GET /api/logs/stream`：日志 SSE 推送
+- `POST /api/show`：Ollama discovery/metadata
+- `GET /api/tags`：Ollama discovery/metadata
+- `POST /chat/completions`：Chat Completions
+- `POST /v1/chat/completions`：Chat Completions
+- `POST /v1/messages`：Anthropic Messages
+- `POST /v1/responses`：OpenAI Responses
+- 其余路径：返回 `404`
 
 ## Web UI
 

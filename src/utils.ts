@@ -5,24 +5,23 @@ type SseRecord = {
     parsed: unknown;
 };
 
-export class Utils {
-    private static readonly SSE_LOG_TEXT_MAX = 4000;
-    private static readonly TEXT_PREVIEW_MAX = 8000;
-    private static readonly INVALID_JSON_PREVIEW_MAX = 2000;
-    private static isObjectDumpQuiet = false;
+const SSE_LOG_TEXT_MAX = 4000;
+const TEXT_PREVIEW_MAX = 8000;
+const INVALID_JSON_PREVIEW_MAX = 2000;
+let isObjectDumpQuiet = false;
 
-    static setObjectDumpQuiet(isQuiet: boolean) {
-        this.isObjectDumpQuiet = isQuiet;
-    }
+export function setObjectDumpQuiet(isQuiet: boolean) {
+    isObjectDumpQuiet = isQuiet;
+}
 
-    static dumpObject(name: string, info: unknown) {
-        if (this.isObjectDumpQuiet) {
+export function dumpObject(name: string, info: unknown) {
+        if (isObjectDumpQuiet) {
             return;
         }
         try {
             const normalized: Record<string, unknown> = {};
             for (const [key, value] of Object.entries((info ?? {}) as Record<string, unknown>)) {
-                normalized[key] = this.normalizeDumpValue(value);
+                normalized[key] = normalizeDumpValue(value);
             }
             console.log(`[ObjectDump::${name}]\n${JSON.stringify(normalized, null, 2)}`);
         } catch (e) {
@@ -30,40 +29,40 @@ export class Utils {
         }
     }
 
-    static timeNow() {
+export function timeNow() {
         const d = new Date();
         const pad2 = (n: number) => String(n).padStart(2, "0");
         const pad3 = (n: number) => String(n).padStart(3, "0");
         return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}.${pad3(d.getMilliseconds())}`;
     }
 
-    static maskSecret(secret: string): string {
+export function maskSecret(secret: string): string {
         if (secret.length <= 10) {
             return secret;
         }
         return `${secret.slice(0, 5)}...${secret.slice(-5)}`;
     }
 
-    static maskHeaderValue(headerName: string, headerValue: string): string {
+export function maskHeaderValue(headerName: string, headerValue: string): string {
         const normalizedHeaderName = headerName.toLowerCase();
         if (normalizedHeaderName === "authorization" || normalizedHeaderName === "proxy-authorization") {
             const authParts = headerValue.match(/^(\S+)\s+(.+)$/);
             if (!authParts) {
-                return this.maskSecret(headerValue);
+                return maskSecret(headerValue);
             }
-            return `${authParts[1]} ${this.maskSecret(authParts[2])}`;
+            return `${authParts[1]} ${maskSecret(authParts[2])}`;
         }
         if (normalizedHeaderName === "x-api-key" || normalizedHeaderName === "api-key") {
-            return this.maskSecret(headerValue);
+            return maskSecret(headerValue);
         }
         return headerValue;
     }
 
-    static isSseContentType(contentType: string | null): boolean {
+export function isSseContentType(contentType: string | null): boolean {
         return (contentType ?? "").toLowerCase().includes("text/event-stream");
     }
 
-    static async readStreamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
+export async function readStreamToText(stream: ReadableStream<Uint8Array>): Promise<string> {
         const reader = stream.getReader();
         const decoder = new TextDecoder();
         let text = "";
@@ -83,39 +82,39 @@ export class Utils {
     }
 
     /** 把上游正文转成日志结构 */
-    static responseBodyForLog(text: string, contentType: string | null): unknown {
+export function responseBodyForLog(text: string, contentType: string | null): unknown {
         const trimmedText = text.trimStart();
-        const isSse = this.isSseContentType(contentType) || trimmedText.startsWith("event:");
+        const isSse = isSseContentType(contentType) || trimmedText.startsWith("event:");
         if (isSse) {
-            return this.summarizeSseForLog(text);
+            return summarizeSseForLog(text);
         }
         if (trimmedText.startsWith("{") || trimmedText.startsWith("[")) {
             try {
                 const parsed = JSON.parse(text) as Record<string, unknown>;
-                const toolCalls = this.extractToolCallsFromResponse(parsed);
+                const toolCalls = extractToolCallsFromResponse(parsed);
                 return toolCalls.length > 0 ? { ...parsed, toolCalls } : parsed;
             } catch {
                 return {
                     format: "invalid-json",
-                    preview: text.slice(0, this.INVALID_JSON_PREVIEW_MAX),
+                    preview: text.slice(0, INVALID_JSON_PREVIEW_MAX),
                 };
             }
         }
-        if (text.length > this.TEXT_PREVIEW_MAX) {
+        if (text.length > TEXT_PREVIEW_MAX) {
             return {
                 format: "text",
                 truncated: true,
                 byteLength: text.length,
-                preview: text.slice(0, this.TEXT_PREVIEW_MAX),
+                preview: text.slice(0, TEXT_PREVIEW_MAX),
             };
         }
         return text;
     }
 
-    private static normalizeDumpValue(value: unknown): unknown {
+function normalizeDumpValue(value: unknown): unknown {
         if (value instanceof Headers) {
             return Object.fromEntries(
-                Array.from(value.entries()).map(([key, item]) => [key, this.maskHeaderValue(key, item)]),
+                Array.from(value.entries()).map(([key, item]) => [key, maskHeaderValue(key, item)]),
             );
         }
         if (value && typeof value === "object" && !(value instanceof Array)) {
@@ -125,7 +124,7 @@ export class Utils {
     }
 
     /** SSE 必须以空行结束，避免最后一帧卡在缓冲区 */
-    private static sseBodyWithTerminator(raw: string): string {
+function sseBodyWithTerminator(raw: string): string {
         if (raw.endsWith("\n\n")) {
             return raw;
         }
@@ -136,7 +135,7 @@ export class Utils {
     }
 
     /** 解析 SSE 并尽量把 data 反序列化成 JSON */
-    private static parseSseRecords(raw: string): SseRecord[] {
+function parseSseRecords(raw: string): SseRecord[] {
         const records: SseRecord[] = [];
         const parser = createParser({
             onEvent: (message) => {
@@ -152,13 +151,13 @@ export class Utils {
                 });
             },
         });
-        parser.feed(this.sseBodyWithTerminator(raw));
+        parser.feed(sseBodyWithTerminator(raw));
         return records;
     }
 
-    private static summarizeSseForLog(raw: string): Record<string, unknown> {
-        const records = this.parseSseRecords(raw);
-        const summary = this.accumulateSseForAnthropicLog(records);
+function summarizeSseForLog(raw: string): Record<string, unknown> {
+        const records = parseSseRecords(raw);
+        const summary = accumulateSseForAnthropicLog(records);
         const thinking = summary.thinking.join("");
         const text = summary.text.join("");
         return {
@@ -170,22 +169,22 @@ export class Utils {
             ...(summary.message ? { message: summary.message } : {}),
             ...(summary.usage !== undefined ? { usage: summary.usage } : {}),
             ...(summary.stopReason !== undefined ? { stopReason: summary.stopReason } : {}),
-            ...(thinking ? { thinking: this.truncateForSseLog(thinking) } : {}),
-            ...(text ? { assistantText: this.truncateForSseLog(text) } : {}),
+            ...(thinking ? { thinking: truncateForSseLog(thinking) } : {}),
+            ...(text ? { assistantText: truncateForSseLog(text) } : {}),
             ...(summary.toolCalls.length > 0 ? { toolCalls: summary.toolCalls.map(tc => ({
                 name: tc.name,
                 ...(tc.id ? { id: tc.id } : {}),
-                input: this.parseToolInput(tc.inputJson),
+                input: parseToolInput(tc.inputJson),
             })) } : {}),
             tail: records.slice(-5).map((record) => ({
                 sseEvent: record.sseEvent,
-                dataType: this.ssePayloadDataType(record.parsed),
+                dataType: ssePayloadDataType(record.parsed),
             })),
         };
     }
 
     /** 扫一遍 SSE 帧，只保留日志需要的信息 */
-    private static accumulateSseForAnthropicLog(records: SseRecord[]) {
+function accumulateSseForAnthropicLog(records: SseRecord[]) {
         const sseEventCounts: Record<string, number> = {};
         const dataTypeCounts: Record<string, number> = {};
         let message: Record<string, string> | undefined;
@@ -277,15 +276,15 @@ export class Utils {
         return { sseEventCounts, dataTypeCounts, message, usage, stopReason, thinking, text, toolCalls };
     }
 
-    private static truncateForSseLog(text: string): string {
-        if (text.length <= this.SSE_LOG_TEXT_MAX) {
+function truncateForSseLog(text: string): string {
+        if (text.length <= SSE_LOG_TEXT_MAX) {
             return text;
         }
-        return `${text.slice(0, this.SSE_LOG_TEXT_MAX)}…(全文${text.length}字，已截断)`;
+        return `${text.slice(0, SSE_LOG_TEXT_MAX)}…(全文${text.length}字，已截断)`;
     }
 
     /** 解析工具调用参数 JSON，失败则截断原文 */
-    private static parseToolInput(inputJson: string): unknown {
+function parseToolInput(inputJson: string): unknown {
         if (!inputJson) return null;
         try {
             return JSON.parse(inputJson);
@@ -296,7 +295,7 @@ export class Utils {
     }
 
     /** 从已解析的 SSE 摘要或普通 JSON 响应中提取 tool_calls */
-    private static extractToolCallsFromResponse(response: Record<string, unknown>): Array<{ name: string; input: unknown }> {
+function extractToolCallsFromResponse(response: Record<string, unknown>): Array<{ name: string; input: unknown }> {
         // SSE 格式已带 toolCalls，直接返回
         if (Array.isArray(response.toolCalls)) {
             return response.toolCalls as Array<{ name: string; input: unknown }>;
@@ -330,10 +329,9 @@ export class Utils {
         return [];
     }
 
-    private static ssePayloadDataType(parsed: unknown): unknown {
+function ssePayloadDataType(parsed: unknown): unknown {
         if (typeof parsed === "object" && parsed !== null && "type" in parsed) {
             return (parsed as { type: unknown }).type;
         }
         return typeof parsed;
     }
-}

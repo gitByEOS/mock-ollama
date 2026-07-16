@@ -5,12 +5,17 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && tsx scripts/make-cli.ts && cp src/page.html dist/page.html",
+    "build": "tsc && node --import tsx scripts/make-cli.ts && cp src/page.html dist/page.html",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "verify": "npm run typecheck && npm test",
+    "release:check": "npm run verify",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run verify"
   },
   "bin": {
-    "mock-ollama": "./dist/index.js"
+    "mock-ollama": "dist/index.js"
   },
   "publishConfig": {
     "access": "public"
@@ -32,6 +37,13 @@
   "homepage": "https://github.com/gitByEOS/mock-ollama#readme",
   "engines": {
     "node": ">=20.12.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "12.0.1",
+      "onFail": "download"
+    }
   },
   "type": "commonjs",
   "dependencies": {

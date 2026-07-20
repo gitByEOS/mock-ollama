@@ -13,6 +13,9 @@ export {
     type ProviderContext,
 } from "./provider";
 export { matrixAction, type ApiFormat, type MatrixAction } from "./bridge/matrix";
+export { createCursorApp, type CursorModel, type CursorProxyOptions } from "./cursor";
+export { startCursorServer, type CursorServerOptions, type CursorTunnelMode } from "./cursor_server";
+export { parseQuickTunnelUrl, startQuickTunnel } from "./cursor_tunnel";
 export { main };
 
 if (require.main === module) {

@@ -99,9 +99,10 @@ export function chatRequestToResponses(body: JsonObject): JsonObject {
     };
     if (instructions.length > 0) result.instructions = instructions.join("\n");
     result.max_output_tokens = body.max_completion_tokens ?? body.max_tokens;
-    for (const field of ["temperature", "top_p", "service_tier", "parallel_tool_calls", "user"] as const) {
+    for (const field of ["temperature", "top_p", "service_tier", "parallel_tool_calls"] as const) {
         if (body[field] !== undefined) result[field] = body[field];
     }
+    // 上游 Responses 端点不接受 user/metadata 字段，转换时丢弃
     if (body.reasoning_effort !== undefined) result.reasoning = { effort: body.reasoning_effort };
     const tools = array(body.tools).flatMap((rawTool): JsonObject[] => {
         const tool = object(rawTool);
@@ -171,7 +172,7 @@ export function responsesRequestToChat(body: JsonObject): JsonObject {
         stream: body.stream === true,
         max_completion_tokens: body.max_output_tokens,
     };
-    for (const field of ["temperature", "top_p", "service_tier", "parallel_tool_calls", "user"] as const) {
+    for (const field of ["temperature", "top_p", "service_tier", "parallel_tool_calls"] as const) {
         if (body[field] !== undefined) result[field] = body[field];
     }
     if (string(object(body.reasoning)?.effort)) result.reasoning_effort = object(body.reasoning)?.effort;

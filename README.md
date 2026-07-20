@@ -107,6 +107,31 @@ mock-ollama --url "https://api.example.com" --apikey "your-key" --api-style anth
 mock-ollama --api-style responses --bridge --url "https://api.example.com/v1" --apikey "your-key"
 ```
 
+### Cursor 公网代理
+
+主服务 `11434` 含 Web UI 和管理接口，不要直接暴露。另起一个仅含 BYOK 路由的公网入口：
+
+```bash
+# 1. 主服务，只在本机监听
+mock-ollama --url "https://api.example.com/v1" --apikey "your-key" --api-style responses --bridge
+
+# 2. Cursor 入口，自动启动临时 Cloudflare Tunnel
+mock-ollama --cursor
+```
+
+代理启动时从主服务拉取真实模型列表，打印 Cursor Settings 所需的 Base URL、API Key 和模型名。Cursor 端启用 `Override OpenAI Base URL`，填入打印的地址、Key 和任一模型名，可填多个自由切换。
+
+可选参数：
+
+| 参数 | 默认值 | 功能 |
+|---|---|---|
+| `--cursor-port` | `11435` | Cursor 专用本机回环端口 |
+| `--cursor-api-key` | 随机生成 | 固定 Bearer key，不指定则每次启动生成 |
+| `--cursor-tunnel` | `quick` | `off` 则仅启动本地入口，不套 Cloudflare 隧道 |
+| `--cursor-upstream` | `http://localhost:11434` | 已启动的主服务地址 |
+
+公网入口仅暴露 `/healthz`、`/v1/models`、`/v1/chat/completions`，除健康检查外均需 Bearer 认证。临时 `trycloudflare.com` 地址重启会变，长期使用请配置受控域名和 Cloudflare Access。
+
 在兼容 Anthropic 协议的客户端配置文件中，可设置：
 
 ```json

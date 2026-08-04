@@ -11,6 +11,7 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "verify": "npm run typecheck && npm test",
     "release:check": "npm run verify",
+    "package": "bash tools/build.sh",
     "prepack": "npm run build",
     "prepublishOnly": "npm run verify"
   },

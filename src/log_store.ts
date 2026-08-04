@@ -3,6 +3,8 @@ export type LogEntry = {
     time: string;
     method: string;
     path: string;
+    sessionId?: string;
+    cacheScope?: string;
     model?: string;
     duration?: number;
     status?: number;

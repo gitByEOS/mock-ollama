@@ -40,4 +40,5 @@ coverage/
 .cache/
 test/
 tsx-*/
+mock-ollama-*.tgz
 .claude/

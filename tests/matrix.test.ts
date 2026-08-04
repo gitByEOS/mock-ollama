@@ -209,6 +209,85 @@ test("--bridge=false 的 Responses 配置仍保持透明代理", async () => {
     }
 });
 
+test("请求日志记录入站会话标识且不为无会话请求伪造标识", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify(responseBody.responses), {
+        headers: { "content-type": "application/json" },
+    });
+    const app = createApp(createProviderContext({
+        baseUrl: "https://upstream.test", apikey: "key", apiStyle: "responses", bridge: false,
+    }));
+    try {
+        await app.request("/api/logs", { method: "DELETE" });
+        await app.request("/v1/responses", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-claude-code-session-id": "header-session" },
+            body: JSON.stringify(requestBody.responses),
+        });
+        await app.request("/v1/responses", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...requestBody.responses, prompt_cache_key: "cache-key-session" }),
+        });
+        await app.request("/v1/responses", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(requestBody.responses),
+        });
+
+        const logs = await (await app.request("/api/logs")).json() as Array<JsonObject>;
+        assert.equal(logs.length, 3);
+        assert.equal(logs[0].sessionId, "header-session");
+        assert.equal(logs[1].sessionId, "cache-key-session");
+        assert.equal(Object.hasOwn(logs[2], "sessionId"), false);
+    } finally {
+        await app.request("/api/logs", { method: "DELETE" });
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test("同 session header 的主 agent 与 subagent 按 system 指纹分到不同 cacheScope", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify(responseBody.anthropic), {
+        headers: { "content-type": "application/json" },
+    });
+    const app = createApp(createProviderContext({
+        baseUrl: "https://upstream.test", apikey: "key", apiStyle: "anthropic", bridge: false,
+    }));
+    try {
+        await app.request("/api/logs", { method: "DELETE" });
+        const sharedHeader = { "content-type": "application/json", "x-claude-code-session-id": "shared-session" };
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers: sharedHeader,
+            body: JSON.stringify({ ...requestBody.anthropic, system: "主 agent system" }),
+        });
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers: sharedHeader,
+            body: JSON.stringify({ ...requestBody.anthropic, system: "subagent system" }),
+        });
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers: sharedHeader,
+            body: JSON.stringify(requestBody.anthropic),
+        });
+
+        const logs = await (await app.request("/api/logs")).json() as Array<JsonObject>;
+        assert.equal(logs.length, 3);
+        assert.equal(logs[0].sessionId, "shared-session");
+        assert.equal(logs[1].sessionId, "shared-session");
+        assert.equal(logs[2].sessionId, "shared-session");
+        assert.equal(typeof logs[0].cacheScope, "string");
+        assert.equal(typeof logs[1].cacheScope, "string");
+        assert.notEqual(logs[0].cacheScope, logs[1].cacheScope);
+        assert.equal(Object.hasOwn(logs[2], "cacheScope"), false);
+    } finally {
+        await app.request("/api/logs", { method: "DELETE" });
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test("--bridge=true 九格均命中所选上游端点", async () => {
     const originalFetch = globalThis.fetch;
     try {

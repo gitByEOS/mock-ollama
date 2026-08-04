@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { name } from "../package.json";
@@ -37,10 +38,66 @@ async function readRequestBodyForLog(request: Request) {
     }
     return responseBodyForLog(rawText, contentType);
 }
+
+function requestSessionId(request: Request, body: unknown): string | undefined {
+    for (const name of ["x-claude-code-session-id", "session-id", "thread-id"]) {
+        const value = request.headers.get(name);
+        if (value) return value;
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+    const promptCacheKey = (body as Record<string, unknown>).prompt_cache_key;
+    return typeof promptCacheKey === "string" ? promptCacheKey : undefined;
+}
+
+// 提取 cache 作用域：同一 cache 上下文（主 agent / subagent 各自独立）的稳定指纹
+function requestCacheScope(routePath: string, body: unknown): string | undefined {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+    const obj = body as Record<string, unknown>;
+    if (routePath === "/v1/responses") {
+        const key = obj.prompt_cache_key;
+        return typeof key === "string" ? key : undefined;
+    }
+    if (routePath === "/v1/messages") {
+        return hashSystemText(obj.system);
+    }
+    if (routePath === "/chat/completions" || routePath === "/v1/chat/completions") {
+        return hashFirstMessage(obj.messages);
+    }
+    return undefined;
+}
+
+function hashSystemText(system: unknown): string | undefined {
+    const text = typeof system === "string"
+        ? system
+        : Array.isArray(system)
+            ? system.map((b) => b && typeof b === "object" && typeof (b as Record<string, unknown>).text === "string"
+                ? (b as Record<string, unknown>).text as string
+                : "").join("")
+            : "";
+    return text ? createHash("sha1").update(text).digest("hex").slice(0, 8) : undefined;
+}
+
+function hashFirstMessage(messages: unknown): string | undefined {
+    if (!Array.isArray(messages) || messages.length === 0) return undefined;
+    const first = messages[0] as Record<string, unknown> | null;
+    if (!first || typeof first !== "object") return undefined;
+    const content = first.content;
+    const text = typeof content === "string"
+        ? content
+        : Array.isArray(content)
+            ? content.map((b) => b && typeof b === "object" && typeof (b as Record<string, unknown>).text === "string"
+                ? (b as Record<string, unknown>).text as string
+                : "").join("")
+            : "";
+    return text ? createHash("sha1").update(text).digest("hex").slice(0, 8) : undefined;
+}
+
 async function proxyChatRequest(c: any, routePath: string, context: ProviderContext, upstreamPath?: string) {
     const startTime = Date.now();
     const timeNow = currentTime();
     const body = await c.req.json();
+    const sessionId = requestSessionId(c.req.raw, body);
+    const cacheScope = requestCacheScope(routePath, body);
     const chooseModel = body.model ?? "unknown";
 
     console.log(`[${timeNow}] [请求] POST ${routePath} from model ${chooseModel}`);
@@ -77,6 +134,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
                         time: timeNow,
                         method: "POST",
                         path: routePath,
+                        sessionId,
+                        cacheScope,
                         model: chooseModel,
                         duration,
                         status: res.status,
@@ -90,6 +149,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
                         time: timeNow,
                         method: "POST",
                         path: routePath,
+                        sessionId,
+                        cacheScope,
                         model: chooseModel,
                         duration: Date.now() - startTime,
                         status: res.status,
@@ -120,6 +181,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
             time: timeNow,
             method: "POST",
             path: routePath,
+            sessionId,
+            cacheScope,
             model: chooseModel,
             duration,
             status: res.status,
@@ -139,6 +202,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
             time: timeNow,
             method: "POST",
             path: routePath,
+            sessionId,
+            cacheScope,
             model: chooseModel,
             duration,
             status: 500,
@@ -158,6 +223,8 @@ async function convertedRequestWithLog(
     const timeNow = currentTime();
     const request = c.req.raw as Request;
     const requestBody = await readRequestBodyForLog(request);
+    const sessionId = requestSessionId(request, requestBody);
+    const cacheScope = requestCacheScope(routePath, requestBody);
     const model = objectModel(requestBody);
     console.log(`[${timeNow}] [请求] POST ${routePath} from model ${model}`);
     try {
@@ -170,6 +237,8 @@ async function convertedRequestWithLog(
                     time: timeNow,
                     method: "POST",
                     path: routePath,
+                    sessionId,
+                    cacheScope,
                     model,
                     duration: Date.now() - startTime,
                     status: response.status,
@@ -189,6 +258,8 @@ async function convertedRequestWithLog(
             time: timeNow,
             method: "POST",
             path: routePath,
+            sessionId,
+            cacheScope,
             model,
             duration: Date.now() - startTime,
             status: response.status,
@@ -201,6 +272,8 @@ async function convertedRequestWithLog(
             time: timeNow,
             method: "POST",
             path: routePath,
+            sessionId,
+            cacheScope,
             model,
             duration: Date.now() - startTime,
             status: 500,

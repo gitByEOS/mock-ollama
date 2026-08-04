@@ -302,6 +302,14 @@ body {
   line-height: 1;
 }
 
+.log-session {
+  font-size: 11px;
+  color: #a78bfa;
+  font-family: 'SF Mono', monospace;
+  line-height: 1;
+  word-break: break-all;
+}
+
 .log-status {
   padding: 3px 8px;
   border-radius: 4px;
@@ -1359,6 +1367,16 @@ function getText(text) {
   return typeof text === 'string' ? text : JSON.stringify(text);
 }
 
+function findPreviousSessionPost(log) {
+  if (!log.cacheScope || !window.currentLogs) return null;
+  const currentIndex = window.currentLogs.findIndex(l => l.id === log.id);
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const previous = window.currentLogs[i];
+    if (previous.method === 'POST' && previous.cacheScope === log.cacheScope) return previous;
+  }
+  return null;
+}
+
 function buildDistBar(log) {
   if (log.error) {
     return `<div class="dist-bar-container">
@@ -1369,18 +1387,10 @@ function buildDistBar(log) {
     </div>`;
   }
 
-  // 查找上一条 POST 请求的 cache 值
-  let prevCacheTokens = 0;
-  if (window.currentLogs) {
-    const currentIndex = window.currentLogs.findIndex(l => l.id === log.id);
-    for (let i = currentIndex - 1; i >= 0; i--) {
-      if (window.currentLogs[i].method === 'POST') {
-        const prevUsage = window.currentLogs[i].response?.usage;
-        prevCacheTokens = prevUsage?.cache_read_input_tokens || 0;
-        break;
-      }
-    }
-  }
+  // 仅以同一会话更早的 POST 请求作为 cache 对比基线
+  const previousSessionPost = findPreviousSessionPost(log);
+  const prevUsage = previousSessionPost?.response?.usage;
+  const prevCacheTokens = prevUsage?.cache_read_input_tokens || 0;
 
   // 分析请求消息
   const messages = log.request?.messages || [];
@@ -1920,6 +1930,7 @@ function renderSingleLogCard(log) {
     <div class="log-time">${splitTime(log.time)}</div>
     <div class="log-method ${log.method}">${log.method}</div>
     <div class="log-path">${log.path}</div>
+    <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
     <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
     <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
   </div>`;
@@ -1959,6 +1970,7 @@ function renderLogs(logs) {
       <div class="log-time">${splitTime(log.time)}</div>
       <div class="log-method ${log.method}">${log.method}</div>
       <div class="log-path">${log.path}</div>
+      <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
       <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
       <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
     </div>`;
@@ -2055,20 +2067,9 @@ function extractDiffLines() {
   const currentLog = window.currentLogs?.find(l => l.id === currentDiffLogId);
   if (!currentLog) return;
 
-  // 找上一条 POST 请求
-  const logs = window.currentLogs || [];
-  const currentIndex = logs.findIndex(l => l.id === currentDiffLogId);
-  let prevLog = null;
-
-  for (let i = currentIndex - 1; i >= 0; i--) {
-    if (logs[i].method === 'POST') {
-      prevLog = logs[i];
-      break;
-    }
-  }
-
+  const prevLog = findPreviousSessionPost(currentLog);
   if (!prevLog) {
-    alert('没有可对比的更早 POST 请求');
+    alert('没有同一会话的更早 POST 请求');
     return;
   }
 
@@ -2134,21 +2135,9 @@ function openDiffView() {
   const currentLog = window.currentLogs?.find(l => l.id === currentDiffLogId);
   if (!currentLog) return;
 
-  // 找上一条 POST 请求（时间上更早的）
-  const logs = window.currentLogs || [];
-  const currentIndex = logs.findIndex(l => l.id === currentDiffLogId);
-  let prevLog = null;
-
-  // 往前找（索引减小方向），找到时间上更早的 POST 请求
-  for (let i = currentIndex - 1; i >= 0; i--) {
-    if (logs[i].method === 'POST') {
-      prevLog = logs[i];
-      break;
-    }
-  }
-
+  const prevLog = findPreviousSessionPost(currentLog);
   if (!prevLog) {
-    alert('没有可对比的更早 POST 请求');
+    alert('没有同一会话的更早 POST 请求');
     return;
   }
 

@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { loadEnvFile } from "node:process";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -10,6 +11,8 @@ import { configureProvider } from "./provider";
 import { dumpObject, maskSecret, setObjectDumpQuiet } from "./utils";
 
 if (existsSync(".env")) loadEnvFile();
+
+const packageVersion = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8")).version as string;
 
 export async function main() {
     const providerPresetDemo = [
@@ -27,6 +30,7 @@ export async function main() {
     const cli = await yargs(hideBin(process.argv))
             .usage("Usage: mock-ollama [command] <options>")
             .scriptName("mock-ollama")
+            .version(packageVersion)
             .alias("v", "version")
             .alias("h", "help")
             .alias("q", "quiet")

@@ -11,10 +11,12 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -36,14 +38,14 @@ jobs:
         env:
           TAG_VERSION: ${{ github.ref_name }}
         run: |
-          tag_version="${TAG_VERSION#v}"
           package_version="$(node -p "require('./package.json').version")"
-          if [ "$tag_version" != "$package_version" ]; then
-            echo "Tag version $tag_version does not match package version $package_version" >&2
+          expected_tag="v${package_version}"
+          if [ "$TAG_VERSION" != "$expected_tag" ]; then
+            echo "Tag $TAG_VERSION does not exactly match expected tag $expected_tag" >&2
             exit 1
           fi
 
       - name: Publish package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish --provenance --access public

@@ -1387,11 +1387,6 @@ function buildDistBar(log) {
     </div>`;
   }
 
-  // 仅以同一会话更早的 POST 请求作为 cache 对比基线
-  const previousSessionPost = findPreviousSessionPost(log);
-  const prevUsage = previousSessionPost?.response?.usage;
-  const prevCacheTokens = prevUsage?.cache_read_input_tokens || 0;
-
   // 分析请求消息
   const messages = log.request?.messages || [];
   const userMsgs = messages.filter(m => m.role === 'user');
@@ -1515,22 +1510,20 @@ function buildDistBar(log) {
     </div>`;
   }
 
-  // Cache 和 Input 显示（如果有 cache）
-  if (cacheTokens > 0) {
+  // Cache 和 Input 显示（如果有 cache 或检测到 cache 下降）
+  if (cacheTokens > 0 || log.cacheDrop) {
     const actualInput = hasUsage ? usage.input_tokens : requestTotal;
     const totalInputWithCache = actualInput + cacheTokens;
     const cachePct = (cacheTokens / totalInputWithCache) * 100;
     const inputPct = (actualInput / totalInputWithCache) * 100;
 
-    // 如果当前 cache 小于上一条，显示红色警告
-    const cacheDecreased = prevCacheTokens > 0 && cacheTokens < prevCacheTokens;
-    const cacheClass = cacheDecreased ? 'dist-cat-cache-warning' : 'dist-cat-cache';
-    const cacheValueClass = cacheDecreased ? 'dist-cat-value cache-warning' : 'dist-cat-value cache';
+    const cacheClass = log.cacheDrop ? 'dist-cat-cache-warning' : 'dist-cat-cache';
+    const cacheValueClass = log.cacheDrop ? 'dist-cat-value cache-warning' : 'dist-cat-value cache';
 
     html += `<div class="dist-category ${cacheClass}">
       <div class="dist-cat-label">Cache</div>
       <div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${barWidth(cachePct)}%"></div></div>
-      <div class="dist-cat-value cache">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)${cacheDecreased ? `<span style="color:#dc2626"> ↓${fmtTokens(prevCacheTokens - cacheTokens)}</span>` : ''}</div>
+      <div class="${cacheValueClass}">${fmtTokens(cacheTokens)} (${fmtPct(cachePct)}%)${log.cacheDrop ? `<span style="color:#dc2626"> 缓存读取下降 -${fmtTokens(log.cacheDrop.lostTokens)}（${fmtTokens(log.cacheDrop.prevCacheRead)} → ${fmtTokens(log.cacheDrop.currentCacheRead)}）</span>` : ''}</div>
     </div>`;
     html += `<div class="dist-category">
       <div class="dist-cat-label">Input</div>
@@ -1931,7 +1924,7 @@ function renderSingleLogCard(log) {
     <div class="log-method ${log.method}">${log.method}</div>
     <div class="log-path">${log.path}</div>
     <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
-    <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
+    <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span>${log.cacheDrop ? `<span class="log-status error">cache drop</span>` : ''}</div>
     <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
   </div>`;
 
@@ -1971,7 +1964,7 @@ function renderLogs(logs) {
       <div class="log-method ${log.method}">${log.method}</div>
       <div class="log-path">${log.path}</div>
       <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
-      <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span></div>
+      <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span>${log.cacheDrop ? `<span class="log-status error">cache drop</span>` : ''}</div>
       <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
     </div>`;
 

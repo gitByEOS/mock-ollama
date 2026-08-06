@@ -288,6 +288,38 @@ test("同 session header 的主 agent 与 subagent 按 system 指纹分到不同
     }
 });
 
+test("同 cacheScope 的 cache 读取下降会记录 cacheDrop", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalCacheDropsPath = process.env.MOCK_OLLAMA_CACHE_DROPS_PATH;
+    delete process.env.MOCK_OLLAMA_CACHE_DROPS_PATH;
+    let requestCount = 0;
+    globalThis.fetch = async () => {
+        requestCount++;
+        return new Response(JSON.stringify({
+            ...responseBody.anthropic,
+            usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: requestCount === 1 ? 10000 : 8000 },
+        }), { headers: { "content-type": "application/json" } });
+    };
+    const app = createApp(createProviderContext({
+        baseUrl: "https://upstream.test", apikey: "key", apiStyle: "anthropic", bridge: false,
+    }));
+    try {
+        await app.request("/api/logs", { method: "DELETE" });
+        const headers = { "content-type": "application/json", "x-claude-code-session-id": "cache-drop-session" };
+        const request = { ...requestBody.anthropic, system: "cache-drop system" };
+        await app.request("/v1/messages", { method: "POST", headers, body: JSON.stringify(request) });
+        await app.request("/v1/messages", { method: "POST", headers, body: JSON.stringify({ ...request, messages: [{ role: "user", content: "next" }] }) });
+
+        const logs = await (await app.request("/api/logs")).json() as Array<JsonObject>;
+        assert.deepEqual(logs[1].cacheDrop, { lostTokens: 2000, prevCacheRead: 10000, currentCacheRead: 8000 });
+    } finally {
+        await app.request("/api/logs", { method: "DELETE" });
+        globalThis.fetch = originalFetch;
+        if (originalCacheDropsPath === undefined) delete process.env.MOCK_OLLAMA_CACHE_DROPS_PATH;
+        else process.env.MOCK_OLLAMA_CACHE_DROPS_PATH = originalCacheDropsPath;
+    }
+});
+
 test("--bridge=true 九格均命中所选上游端点", async () => {
     const originalFetch = globalThis.fetch;
     try {

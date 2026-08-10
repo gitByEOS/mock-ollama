@@ -19,6 +19,7 @@ test("实时日志按动画帧批处理、隐藏页暂停并统一裁剪", () =>
     assert.match(page, /if \(document\.hidden \|\| pendingRealtimeLogs\.size === 0\) return/);
     assert.match(page, /document\.addEventListener\('visibilitychange'/);
     assert.match(page, /logs\.slice\(-MAX_VISIBLE_LOGS\)/);
+    assert.match(page, /window\.scrollTo\(\{ top: 0, behavior: 'smooth' \}\)/);
 });
 
 test("主页卡片恢复原有视觉结构且保持 O(1) 轻量渲染", () => {
@@ -34,14 +35,39 @@ test("主页卡片恢复原有视觉结构且保持 O(1) 轻量渲染", () => {
     assert.match(distributionRenderer, /class="dist-bar-wrap"/);
     assert.match(distributionRenderer, /renderAuthoritativeUsage\(log, usage\)/);
     assert.match(page, /function renderLogInteraction\(log\)/);
-    assert.match(page, /User 最后输入/);
+    assert.match(page, /function requestInteractionSummary\(log\)/);
+    assert.match(page, /User 输入/);
+    assert.match(page, /Assistant 上下文/);
+    assert.match(page, /工具结果/);
+    assert.doesNotMatch(page.slice(page.indexOf('function requestInteractionSummary'), page.indexOf('function responseOutput')), /MAX_LOG_CONTEXT_MESSAGES|Assistant 工具调用|本轮工具调用/);
     assert.match(page, /LOG_INTERACTION_PREVIEW_MAX = 2000/);
     assert.doesNotMatch(distributionRenderer + cardRenderer, /buildDistBar|GPTTokenizer|requestIdleCallback|querySelector|\.find\(|\.filter\(|\.map\(/);
     assert.doesNotMatch(page, /renderDistBarsProgressively|dist-bar-placeholder|log-usage-summary/);
     assert.match(page, /const MAX_REALTIME_LOGS_PER_FRAME = 10/);
     assert.match(page, /if \(batch\.length >= MAX_REALTIME_LOGS_PER_FRAME\) break/);
-    assert.match(page, /requestAnimationFrame\(\(\) => \{\s*if \(generation !== detailRenderGeneration/);
+    assert.match(page, /function detailTaskIsCurrent\(generation, logId\)/);
+    assert.match(page, /detailTaskIsCurrent\(generation, log\.id\)/);
     assert.match(page, /const authoritativeUsage = normalizedLogUsage\(log\)/);
+    assert.match(page, /const sseFrameCount = Number\(log\.response\?\.frameCount \|\| 0\)/);
+    assert.match(page, /const messageLength = String\(log\.response\?\.assistantText \|\| ''\)\.length/);
+    assert.match(page, /const toolNames = Array\.isArray\(log\.response\?\.toolCalls\)/);
+    assert.match(page, /工具调用 <span class="dist-cat-value tool">\$\{escapeHtml\(toolNames\)\}<\/span>/);
+    assert.match(page, /\.log-interaction-content::-webkit-scrollbar \{ width: 4px; height: 4px; \}/);
+});
+
+test("详情页分阶段加载历史消息且完整展示内部内容", () => {
+    assert.match(page, /function renderDetailAsync\(log, generation\)/);
+    assert.match(page, /function yieldDetailRender\(\)/);
+    assert.match(page, /requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)/);
+    assert.match(page, /const DETAIL_MESSAGE_BATCH_SIZE = 12/);
+    assert.match(page, /renderNextDetailMessageBatch\(log, generation\)/);
+    assert.match(page, /继续加载/);
+    assert.match(page, /function renderRequestContent\(content\)/);
+    assert.match(page, /return content\.map\(\(block, index\) => \{/);
+    assert.doesNotMatch(page, /详情内容已截断|DETAIL_MESSAGE_CONTENT_MAX|DETAIL_CONTENT_BLOCKS/);
+    assert.match(page, /MAX_DETAIL_TOKENIZED_MESSAGES = 24/);
+    assert.match(page, /MAX_DETAIL_TOKENIZED_CHARS = 16000/);
+    assert.match(page, /const DETAIL_TOOL_STATS_MESSAGES = 100/);
 });
 
 test("Diff 有复杂度硬上限和快速降级", () => {
@@ -58,9 +84,20 @@ test("Diff 高频滚动只在动画帧统一写布局", () => {
     assert.match(page, /minimapRect \?\?= minimap\.getBoundingClientRect\(\)/);
 });
 
-test("Token 统计弹层关闭按钮顶部对齐，分页支持九个页码跳转", () => {
+test("详情 Token 使用量使用紧凑单位", () => {
+    assert.match(page, /function formatDetailedTokenMetric\(value\)/);
+    assert.match(page, /输入: \$\{formatDetailedTokenMetric\(u\.input_tokens\)\}/);
+    assert.match(page, /缓存: \$\{formatDetailedTokenMetric\(u\.cache_read_input_tokens\)\}/);
+});
+
+test("Token 统计控件采用居中白色强调态，分页支持九个页码跳转", () => {
     assert.match(page, /class="panel-close token-dashboard-close"/);
-    assert.match(page, /\.token-dashboard-close \{ flex:0 0 auto; align-self:flex-start; \}/);
+    assert.match(page, /\.token-dashboard-close \{ display:grid; flex:0 0 auto; align-self:flex-start; padding:0; place-items:center; \}/);
+    assert.match(page, /\.token-dashboard-close svg \{ width:16px; height:16px; stroke:#888; stroke-linecap:round; stroke-width:2; \}/);
+    assert.match(page, /<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 13 13M13 3 3 13"\/><\/svg>/);
+    assert.match(page, /\.token-switch button \{[^}]*border:1px solid #333[^}]*border-radius:8px[^}]*\}/);
+    assert.match(page, /\.token-switch button\.active \{ color:#f3f4f6; border-color:#777; background:#222; box-shadow:inset 0 -1px 0 #bbb; \}/);
+    assert.match(page, /\.token-page-button\.active::after \{[^}]*width:10px; height:2px;[^}]*background:#fff;[^}]*\}/);
     assert.match(page, /function tokenRequestPageNumbers\(currentPage, totalPages, maxVisible = 9\)/);
     assert.match(page, /Array\.from\(\{ length: visible \}, \(_, index\) => start \+ index\)/);
     assert.match(page, /class="token-page-button\$\{page === currentPage \? ' active' : ''\}"/);

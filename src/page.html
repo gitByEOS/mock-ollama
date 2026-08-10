@@ -228,7 +228,9 @@ body {
   box-shadow: 0 24px 80px rgba(0,0,0,0.55);
 }
 .token-dashboard-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
-.token-dashboard-close { flex:0 0 auto; align-self:flex-start; }
+.token-dashboard-close { display:grid; flex:0 0 auto; align-self:flex-start; padding:0; place-items:center; }
+.token-dashboard-close svg { width:16px; height:16px; stroke:#888; stroke-linecap:round; stroke-width:2; }
+.token-dashboard-close:hover svg { stroke:#ddd; }
 .token-dashboard-title { font-size:20px; font-weight:700; color:#f3f4f6; }
 .token-dashboard-subtitle { margin-top:5px; color:#777; font-size:12px; }
 .token-overview-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; margin-bottom:24px; }
@@ -251,10 +253,11 @@ body {
 .token-chart { position:relative; height:250px; }
 .token-chart.wide-chart { height:330px; }
 .token-chart-error { display:grid; height:100%; place-items:center; padding:24px; color:#fca5a5; font-size:12px; text-align:center; }
-.token-switch { display:flex; gap:4px; padding:3px; border:1px solid #333; border-radius:8px; }
-.token-switch button { border:0; border-radius:5px; padding:4px 8px; background:transparent; color:#888; font-size:12px; cursor:pointer; }
-.token-switch button:hover, .token-switch button:focus-visible { color:#fff; outline:2px solid #60a5fa; outline-offset:1px; }
-.token-switch button.active { color:#fff; background:#343434; }
+.token-switch { display:flex; gap:6px; }
+.token-switch button { min-height:32px; padding:4px 10px; border:1px solid #333; border-radius:8px; background:#1b1b1b; color:#888; font-size:12px; cursor:pointer; transition:border-color .2s, background .2s, color .2s; }
+.token-switch button:hover { border-color:#555; color:#ddd; }
+.token-switch button:focus-visible { border-color:#777; color:#fff; outline:1px solid #888; outline-offset:2px; }
+.token-switch button.active { color:#f3f4f6; border-color:#777; background:#222; box-shadow:inset 0 -1px 0 #bbb; }
 .token-dashboard-loading { padding:56px; color:#888; text-align:center; }
 body.token-dashboard-open { overflow:hidden; }
 .token-request-section { margin-top:16px; padding:16px; border:1px solid #2d2d2d; border-radius:12px; background:#1b1b1b; }
@@ -275,10 +278,11 @@ body.token-dashboard-open { overflow:hidden; }
 .token-request-empty { padding:28px; color:#777; text-align:center; }
 .token-pagination { display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:12px; color:#777; font-size:12px; }
 .token-pagination button:disabled { opacity:.35; cursor:not-allowed; }
-.token-page-button { min-width:28px; height:28px; padding:0 6px; border:0; border-bottom:2px solid transparent; background:transparent; color:#888; font:inherit; cursor:pointer; }
+.token-page-button { position:relative; min-width:28px; height:28px; padding:0 6px; border:0; background:transparent; color:#888; font:inherit; cursor:pointer; }
 .token-page-button:hover { color:#fff; }
-.token-page-button:focus-visible { color:#fff; outline:1px solid #555; outline-offset:1px; }
-.token-page-button.active { border-bottom-color:#60a5fa; color:#fff; font-weight:650; }
+.token-page-button:focus-visible { color:#fff; outline:1px solid #f3f4f6; outline-offset:1px; }
+.token-page-button.active { color:#fff; font-weight:650; }
+.token-page-button.active::after { position:absolute; bottom:1px; left:50%; width:10px; height:2px; border-radius:999px; background:#fff; content:''; transform:translateX(-50%); }
 .token-page-nav { padding:4px 9px; }
 @media (max-width: 860px) {
   .token-dashboard { padding:12px; }
@@ -551,6 +555,7 @@ body.token-dashboard-open { overflow:hidden; }
 .dist-cat-value.highlight { color: #e0e0e0; }
 .dist-cat-value.green { color: #059669; }
 .dist-cat-value.orange { color: #d97706; }
+.dist-cat-value.tool { color: #e89d3a; }
 .dist-cat-value.blue { color: #2563eb; }
 .dist-cat-value.purple { color: #7c3aed; }
 
@@ -770,7 +775,14 @@ body.token-dashboard-open { overflow:hidden; }
 
 .empty-text { font-size: 14px; color: #555; }
 
-/* 滚动条 */
+/* 日志卡片摘要仅用细滚动条提示内容位置，避免抢占正文空间。 */
+.log-interaction-content { scrollbar-width: thin; scrollbar-color: #3a3a3a transparent; }
+.log-interaction-content::-webkit-scrollbar { width: 4px; height: 4px; }
+.log-interaction-content::-webkit-scrollbar-track { background: transparent; }
+.log-interaction-content::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 999px; }
+.log-interaction-content::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* 其他可滚动区域保留默认可拖动滚动条。 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: #0f0f0f; }
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
@@ -828,6 +840,48 @@ body.panel-open { overflow: hidden; }
   overflow-x: hidden;
   padding: 20px;
 }
+
+.detail-loading {
+  display: grid;
+  min-height: 140px;
+  place-items: center;
+  color: #888;
+  font-size: 13px;
+}
+
+.detail-loading::after {
+  width: 18px;
+  height: 18px;
+  margin-top: 10px;
+  border: 2px solid #333;
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  content: '';
+  animation: detailLoadingSpin .7s linear infinite;
+}
+
+@keyframes detailLoadingSpin { to { transform: rotate(360deg); } }
+
+.detail-progress {
+  margin: 12px 0;
+  color: #777;
+  font-size: 12px;
+  text-align: center;
+}
+
+.detail-load-more {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+}
+
+.detail-load-more:hover { border-color: #555; color: #fff; }
 
 .panel-overlay {
   position: fixed;
@@ -1131,7 +1185,7 @@ body.panel-open { overflow: hidden; }
         <div class="token-dashboard-title" id="tokenDashboardTitle">Token 使用量</div>
         <div class="token-dashboard-subtitle">持久化统计 · 最近 7 天</div>
       </div>
-      <button class="panel-close token-dashboard-close" aria-label="关闭 Token 使用量" onclick="closeTokenDashboard()">×</button>
+      <button class="panel-close token-dashboard-close" aria-label="关闭 Token 使用量" onclick="closeTokenDashboard()"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 13 13M13 3 3 13"/></svg></button>
     </div>
     <div id="tokenDashboardBody" class="token-dashboard-loading">加载统计中…</div>
   </div>
@@ -1281,6 +1335,12 @@ const pendingRealtimeLogs = new Map();
 const logAnalysisCache = new Map();
 let realtimeLogFrame = null;
 let detailRenderGeneration = 0;
+const DETAIL_MESSAGE_BATCH_SIZE = 12;
+const MAX_DETAIL_TOKENIZED_MESSAGES = 24;
+const MAX_DETAIL_TOKENIZED_CHARS = 16000;
+const DETAIL_TOOL_STATS_MESSAGES = 100;
+const DETAIL_TOOL_STATS_BLOCKS = 24;
+const detailMessageOffsets = new Map();
 
 async function loadAppInfo() {
   try {
@@ -1350,6 +1410,7 @@ function flushRealtimeLogs() {
     container.insertAdjacentHTML('afterbegin', batch.reverse().map(renderSingleLogCard).join(''));
     const cards = container.querySelectorAll('.log-card');
     for (let index = MAX_VISIBLE_LOGS; index < cards.length; index++) cards[index].remove();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   if (pendingRealtimeLogs.size > 0) scheduleRealtimeLogFlush();
 }
@@ -1489,6 +1550,14 @@ function formatTokenMetric(value) {
 
 function formatRate(value) {
   return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 }).format(value || 0)} tok/s`;
+}
+
+function formatDetailedTokenMetric(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
+  if (amount >= 1000) return `${(amount / 1000).toFixed(2)}k`;
+  return String(amount);
 }
 
 function destroyTokenCharts() {
@@ -1849,18 +1918,85 @@ function changeTokenRequestPage(page) {
   void loadTokenRequests();
 }
 
+function detailTaskIsCurrent(generation, logId) {
+  return generation === detailRenderGeneration && expandedLogId === logId && document.getElementById('slidePanel').classList.contains('open');
+}
+
+function yieldDetailRender() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function showDetailLoading(panelBody, message) {
+  panelBody.innerHTML = `<div class="detail-loading">${message}</div>`;
+}
+
+async function renderDetailAsync(log, generation) {
+  const panelBody = document.getElementById('panelBody');
+  const mode = viewModes[log.id] || 'friendly';
+  if (!panelBody || !detailTaskIsCurrent(generation, log.id)) return;
+  if (mode === 'raw') {
+    await yieldDetailRender();
+    if (!detailTaskIsCurrent(generation, log.id)) return;
+    const detail = renderDetailContent(log);
+    logAnalysisCache.set(`${log.id}:${mode}`, detail);
+    panelBody.innerHTML = detail;
+    return;
+  }
+
+  panelBody.innerHTML = `${renderDetailControls(log, mode)}${log.error ? `<div class="detail-error">${log.error}</div>` : ''}<div class="friendly-view"><div class="detail-progress">正在分析 Token 与响应…</div></div>`;
+  await yieldDetailRender();
+  if (!detailTaskIsCurrent(generation, log.id)) return;
+
+  const messages = Array.isArray(log.request?.messages) ? log.request.messages : [];
+  const intro = renderFriendlyDetailIntro(log);
+  panelBody.innerHTML = `${renderDetailControls(log, mode)}${log.error ? `<div class="detail-error">${log.error}</div>` : ''}${intro}<div id="detailMessages"></div><div id="detailProgress" class="detail-progress"></div></div>`;
+  await yieldDetailRender();
+  if (!detailTaskIsCurrent(generation, log.id)) return;
+
+  detailMessageOffsets.set(log.id, 0);
+  renderNextDetailMessageBatch(log, generation);
+}
+
+function renderNextDetailMessageBatch(log, generation) {
+  if (!detailTaskIsCurrent(generation, log.id)) return;
+  const messages = Array.isArray(log.request?.messages) ? log.request.messages : [];
+  const start = detailMessageOffsets.get(log.id) ?? 0;
+  const target = document.getElementById('detailMessages');
+  const progress = document.getElementById('detailProgress');
+  if (!target || !progress) return;
+  const html = renderFriendlyRequestMessages(messages, start, DETAIL_MESSAGE_BATCH_SIZE);
+  if (html) target.insertAdjacentHTML('beforeend', html);
+  const next = Math.min(start + DETAIL_MESSAGE_BATCH_SIZE, messages.length);
+  detailMessageOffsets.set(log.id, next);
+  if (next < messages.length) {
+    progress.innerHTML = `${next}/${messages.length} 条历史消息已加载<button type="button" class="detail-load-more" onclick="loadMoreDetailMessages(${log.id}, ${generation})">继续加载</button>`;
+  } else {
+    progress.textContent = messages.length > DETAIL_MESSAGE_BATCH_SIZE ? `已加载全部 ${messages.length} 条历史消息` : '';
+    if (messages.length <= DETAIL_MESSAGE_BATCH_SIZE) {
+      const detail = `${renderDetailControls(log, viewModes[log.id] || 'friendly')}${log.error ? `<div class="detail-error">${log.error}</div>` : ''}${renderFriendlyDetailIntro(log)}${renderFriendlyRequestMessages(messages, 0, messages.length)}</div>`;
+      logAnalysisCache.set(`${log.id}:friendly`, detail);
+    }
+  }
+}
+
+function loadMoreDetailMessages(logId, generation) {
+  const log = window.currentLogs?.find(item => item.id === logId);
+  if (!log || !detailTaskIsCurrent(generation, logId)) return;
+  const progress = document.getElementById('detailProgress');
+  if (progress) progress.textContent = '正在加载更多历史消息…';
+  requestAnimationFrame(() => {
+    if (detailTaskIsCurrent(generation, logId)) renderNextDetailMessageBatch(log, generation);
+  });
+}
+
 function toggleViewMode(logId, mode) {
   viewModes[logId] = mode;
+  const log = window.currentLogs?.find(item => item.id === logId);
+  if (!log || expandedLogId !== logId) return;
+  const generation = ++detailRenderGeneration;
   const panelBody = document.getElementById('panelBody');
-  const log = window.currentLogs?.find(l => l.id === logId);
-  if (!panelBody || !log) return;
-  const key = `${logId}:${mode}`;
-  let detail = logAnalysisCache.get(key);
-  if (!detail) {
-    detail = renderDetailContent(log);
-    logAnalysisCache.set(key, detail);
-  }
-  panelBody.innerHTML = detail;
+  if (panelBody) showDetailLoading(panelBody, '正在切换详情视图…');
+  void renderDetailAsync(log, generation);
 }
 
 function parseSseResponse(response) {
@@ -1910,6 +2046,18 @@ function renderAuthoritativeUsage(log, usage) {
   const cacheValueClass = log.cacheDrop ? 'dist-cat-value cache-warning' : 'dist-cat-value cache';
   const durationSec = (log.duration || 0) / 1000;
   const rate = usage.output > 0 && durationSec > 0 ? Math.round(usage.output / durationSec) : 0;
+  const sseFrameCount = Number(log.response?.frameCount || 0);
+  const messageLength = String(log.response?.assistantText || '').length;
+  const toolNames = Array.isArray(log.response?.toolCalls)
+    ? log.response.toolCalls.map(call => call?.name).filter(name => typeof name === 'string' && name.length > 0).join('、')
+    : '';
+  const metadata = [
+    `耗时 <span class="dist-cat-value orange">${log.duration ?? '-'}ms</span>`,
+    sseFrameCount > 0 ? `SSE帧数 <span class="dist-cat-value">${sseFrameCount}</span>` : '',
+    messageLength > 0 ? `消息长度 <span class="dist-cat-value">${messageLength}</span>` : '',
+    toolNames ? `工具调用 <span class="dist-cat-value tool">${escapeHtml(toolNames)}</span>` : '',
+    rate > 0 ? `Token速率 <span class="dist-cat-value green">${rate} token/s</span>` : '',
+  ].filter(Boolean).join('<span class="dist-meta-sep">·</span>');
 
   return `<div class="dist-bar-container">
     <div class="dist-header"><div class="dist-model">${escapeHtml(modelName)}</div><div class="dist-total">${totalSummary}</div></div>
@@ -1927,7 +2075,7 @@ function renderAuthoritativeUsage(log, usage) {
       <div class="dist-category"><div class="dist-cat-label">Response</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-text" style="width:${barWidth(outputPct)}%"></div></div><div class="dist-cat-value green">${fmt(usage.output)} (${fmtPct(outputPct)}%)</div></div>
       ${appContextLength ? `<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Available</div><div class="dist-category"><div class="dist-cat-label">Free</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-free" style="width:${barWidth(pctOfBar(freeTokens))}%"></div></div><div class="dist-cat-value">${fmt(freeTokens)} (${fmtPct(pctOfBar(freeTokens))}%)</div></div>` : ''}
     </div>
-    <div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a"><div class="dist-meta-line"><span class="dist-cat-label">耗时</span><span class="dist-cat-value orange">${log.duration ?? '-'}ms</span>${rate > 0 ? `<span class="dist-meta-sep">·</span><span class="dist-cat-label">Token速率</span><span class="dist-cat-value green">${rate} token/s</span>` : ''}</div></div>
+    <div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a"><div class="dist-meta-line">${metadata}</div></div>
   </div>`;
 }
 
@@ -1945,14 +2093,16 @@ function buildDistBar(log) {
 
   // 仅在上游没有 usage 时，按需估算单条详情的 Token 分布。
   const messages = log.request?.messages || [];
-  const userMsgs = messages.filter(m => m.role === 'user');
-  const assistantMsgs = messages.filter(m => m.role === 'assistant');
-  const systemMsgs = messages.filter(m => m.role === 'system');
+  const detailMessages = messages.length > MAX_DETAIL_TOKENIZED_MESSAGES ? messages.slice(-MAX_DETAIL_TOKENIZED_MESSAGES) : messages;
+  const userMsgs = detailMessages.filter(m => m.role === 'user');
+  const assistantMsgs = detailMessages.filter(m => m.role === 'assistant');
+  const systemMsgs = detailMessages.filter(m => m.role === 'system');
   const requestSystem = log.request?.system;
 
-  // 精确计算 token 数量（使用 gpt-tokenizer）
+  // 详情页分词有明确上限，避免单个超长历史消息阻塞交互。
   const countTokens = (text) => {
-    const t = getText(text);
+    const source = getText(text);
+    const t = source.length > MAX_DETAIL_TOKENIZED_CHARS ? source.slice(0, MAX_DETAIL_TOKENIZED_CHARS) : source;
     if (!t) return 0;
     try {
       return GPTTokenizer_cl100k_base.encode(t).length;
@@ -2207,7 +2357,7 @@ function buildDistBar(log) {
   return html;
 }
 
-// 渲染 content：字符串或 content block 数组
+// 渲染 content：字符串或 content block 数组。消息及其内容块均按原始数据完整展示。
 function renderRequestContent(content) {
   if (!content) return '<div class="message-content">(空)</div>';
   if (typeof content === 'string') {
@@ -2219,15 +2369,14 @@ function renderRequestContent(content) {
   return content.map((block, index) => {
     const type = block.type || 'block';
     const text = block.text ?? block.thinking ?? block.input ?? block.content ?? '';
-    const preview = typeof text === 'string' ? text : getText(text);
     return `<div class="message-block" style="margin-bottom:6px">
       <div class="message-role"><span>${escapeHtml(type)}</span></div>
-      <div class="message-content">${escapeHtml(preview)}</div>
+      <div class="message-content">${escapeHtml(getText(text))}</div>
     </div>`;
   }).join('');
 }
 
-function renderFriendlyRequest(request) {
+function renderFriendlyRequestHeader(request) {
   if (!request) return '';
   let html = '<div class="friendly-section"><div class="friendly-title">请求详情</div>';
 
@@ -2253,24 +2402,30 @@ function renderFriendlyRequest(request) {
     html += `<div class="friendly-row"><div class="friendly-label">工具</div><div class="friendly-value">${request.tools.length} 个 · ${escapeHtml(toolNames)}</div></div>`;
   }
 
-  // 不显示 system
-  // if (request.system !== undefined && request.system !== null) { ... }
+  const messageCount = Array.isArray(request.messages) ? request.messages.length : 0;
+  if (messageCount > 0) html += `<div class="friendly-row"><div class="friendly-label">消息数</div><div class="friendly-value">${messageCount} 条</div></div>`;
+  return `${html}</div>`;
+}
 
-  if (request.messages && request.messages.length > 0) {
-    html += `<div class="friendly-row"><div class="friendly-label">消息数</div><div class="friendly-value">${request.messages.length} 条</div></div>`;
-    const reversedMsgs = [...request.messages].reverse();
-    reversedMsgs.forEach((msg, idx) => {
-      const role = msg.role || 'unknown';
-      const actualIdx = request.messages.length - idx;
-      html += `<div class="message-block">
-        <div class="message-role"><span>${escapeHtml(role)}</span><span style="float:right;color:#555">#${actualIdx}</span></div>
-        ${renderRequestContent(msg.content)}
-      </div>`;
-    });
+function renderFriendlyRequestMessages(messages, start, count) {
+  if (!Array.isArray(messages) || start >= messages.length) return '';
+  let html = '';
+  const end = Math.min(start + count, messages.length);
+  for (let offset = start; offset < end; offset++) {
+    const actualIdx = messages.length - offset;
+    const msg = messages[actualIdx - 1];
+    const role = msg?.role || 'unknown';
+    html += `<div class="message-block">
+      <div class="message-role"><span>${escapeHtml(role)}</span><span style="float:right;color:#555">#${actualIdx}</span></div>
+      ${renderRequestContent(msg?.content)}
+    </div>`;
   }
-
-  html += '</div>';
   return html;
+}
+
+function renderFriendlyRequest(request) {
+  const messages = Array.isArray(request?.messages) ? request.messages : [];
+  return `${renderFriendlyRequestHeader(request)}${renderFriendlyRequestMessages(messages, 0, messages.length)}`;
 }
 
 function renderFriendlyResponse(response) {
@@ -2314,10 +2469,10 @@ function renderFriendlyResponse(response) {
     if (sseStats.usage) {
       const u = sseStats.usage;
       const parts = [];
-      if (u.input_tokens !== undefined) parts.push(`输入: ${u.input_tokens}`);
-      if (u.output_tokens !== undefined) parts.push(`输出: ${u.output_tokens}`);
-      if (u.cache_read_input_tokens !== undefined) parts.push(`缓存: ${u.cache_read_input_tokens}`);
-      if (u.cache_creation_input_tokens !== undefined) parts.push(`缓存创建: ${u.cache_creation_input_tokens}`);
+      if (u.input_tokens !== undefined) parts.push(`输入: ${formatDetailedTokenMetric(u.input_tokens)}`);
+      if (u.output_tokens !== undefined) parts.push(`输出: ${formatDetailedTokenMetric(u.output_tokens)}`);
+      if (u.cache_read_input_tokens !== undefined) parts.push(`缓存: ${formatDetailedTokenMetric(u.cache_read_input_tokens)}`);
+      if (u.cache_creation_input_tokens !== undefined) parts.push(`缓存创建: ${formatDetailedTokenMetric(u.cache_creation_input_tokens)}`);
       html += `<div class="friendly-row"><div class="friendly-label">Token 使用</div><div class="friendly-value highlight" style="word-break:break-all">${parts.join(' · ')}</div></div>`;
     }
 
@@ -2370,63 +2525,65 @@ function renderFriendlyResponse(response) {
   return html;
 }
 
-function renderDetailContent(log) {
-  const mode = viewModes[log.id] || 'friendly';
-  let html = '';
-
-  // 视图切换按钮 + 复制按钮（原始数据时显示）
-  html += `<div class="view-toggle" style="justify-content:space-between">
+function renderDetailControls(log, mode) {
+  return `<div class="view-toggle" style="justify-content:space-between">
     <div style="display:flex;gap:8px">
       <button class="view-btn ${mode === 'friendly' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'friendly'); event.stopPropagation();">友好视图</button>
       <button class="view-btn ${mode === 'raw' ? 'active' : ''}" onclick="toggleViewMode(${log.id}, 'raw'); event.stopPropagation();">原始数据</button>
     </div>
     ${mode === 'raw' ? `<button class="btn" onclick="copyRawData(${log.id})" style="padding:4px 10px;font-size:12px">拷贝数据</button>` : ''}
   </div>`;
+}
+
+function renderFriendlyToolStats(log) {
+  const toolCallStats = {};
+  const request = log.request;
+  if (request && request.messages && Array.isArray(request.messages)) {
+    const messages = request.messages;
+    const start = Math.max(0, messages.length - DETAIL_TOOL_STATS_MESSAGES);
+    for (let messageIndex = start; messageIndex < messages.length; messageIndex++) {
+      const message = messages[messageIndex];
+      if (message.role !== 'assistant' || !Array.isArray(message.content)) continue;
+      for (let blockIndex = 0; blockIndex < Math.min(message.content.length, DETAIL_TOOL_STATS_BLOCKS); blockIndex++) {
+        const block = message.content[blockIndex];
+        if (block.type !== 'tool_use') continue;
+        const name = block.name || 'unknown';
+        toolCallStats[name] = (toolCallStats[name] || 0) + 1;
+      }
+    }
+  }
+  if (log.response?.toolCalls && log.response.toolCalls.length > 0) {
+    log.response.toolCalls.forEach(tc => {
+      const name = tc.name || 'unknown';
+      toolCallStats[name] = (toolCallStats[name] || 0) + 1;
+    });
+  }
+  const toolNames = Object.keys(toolCallStats);
+  if (toolNames.length === 0) return '';
+  const totalCount = toolNames.reduce((sum, name) => sum + toolCallStats[name], 0);
+  const statsStr = toolNames.map(name => `${name} x${toolCallStats[name]}`).join(', ');
+  return `<div class="friendly-section"><div class="friendly-title">工具调用统计</div>
+    <div class="friendly-row"><div class="friendly-label">总次数</div><div class="friendly-value orange">${totalCount}</div></div>
+    <div class="friendly-row"><div class="friendly-label">分布</div><div class="friendly-value">${escapeHtml(statsStr)}</div></div>
+  </div>`;
+}
+
+function renderFriendlyDetailIntro(log) {
+  const usage = normalizedLogUsage(log);
+  const distribution = usage ? renderAuthoritativeUsage(log, usage) : '<div class="detail-progress">Token 用量缺失，跳过本地分词分析</div>';
+  return `<div class="friendly-view"><div class="dist-bar-wrap">${distribution}</div>${renderFriendlyResponse(log.response)}${renderFriendlyToolStats(log)}${renderFriendlyRequestHeader(log.request)}`;
+}
+
+function renderDetailContent(log) {
+  const mode = viewModes[log.id] || 'friendly';
+  let html = renderDetailControls(log, mode);
 
   if (log.error) {
     html += `<div class="detail-error">${log.error}</div>`;
   }
 
   if (mode === 'friendly') {
-    // 详情按需计算 Token 分布，不再让列表承担重型分词。
-    html += `<div class="friendly-view"><div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
-    html += renderFriendlyResponse(log.response);
-
-    // === 工具调用统计（所有历史） ===
-    const toolCallStats = {};
-    const request = log.request;
-    if (request && request.messages && Array.isArray(request.messages)) {
-      request.messages.forEach(m => {
-        if (m.role === 'assistant' && Array.isArray(m.content)) {
-          m.content.forEach(block => {
-            if (block.type === 'tool_use') {
-              const name = block.name || 'unknown';
-              toolCallStats[name] = (toolCallStats[name] || 0) + 1;
-            }
-          });
-        }
-      });
-    }
-    // 也统计 response 里的 toolCalls
-    if (log.response?.toolCalls && log.response.toolCalls.length > 0) {
-      log.response.toolCalls.forEach(tc => {
-        const name = tc.name || 'unknown';
-        toolCallStats[name] = (toolCallStats[name] || 0) + 1;
-      });
-    }
-
-    const toolNames = Object.keys(toolCallStats);
-    if (toolNames.length > 0) {
-      const totalCount = toolNames.reduce((sum, name) => sum + toolCallStats[name], 0);
-      const statsStr = toolNames.map(name => `${name} x${toolCallStats[name]}`).join(', ');
-      html += `<div class="friendly-section"><div class="friendly-title">工具调用统计</div>`;
-      html += `<div class="friendly-row"><div class="friendly-label">总次数</div><div class="friendly-value orange">${totalCount}</div></div>`;
-      html += `<div class="friendly-row"><div class="friendly-label">分布</div><div class="friendly-value">${escapeHtml(statsStr)}</div></div>`;
-      html += '</div>';
-    }
-
-    html += renderFriendlyRequest(log.request);
-    html += `</div>`;
+    html += `${renderFriendlyDetailIntro(log)}${renderFriendlyRequestMessages(log.request?.messages, 0, Array.isArray(log.request?.messages) ? log.request.messages.length : 0)}</div>`;
   } else {
     // 原始数据视图 - 响应在前，请求在后（倒序）
     if (log.response) {
@@ -2486,62 +2643,104 @@ function normalizedLogUsage(log) {
 }
 
 const LOG_INTERACTION_PREVIEW_MAX = 2000;
+const MAX_LOG_CONTENT_BLOCKS = 16;
 
-function logInteractionPreview(content) {
-  if (content === undefined || content === null) return '';
-  const text = getText(content);
-  return text.length <= LOG_INTERACTION_PREVIEW_MAX
-    ? text
-    : `${text.slice(0, LOG_INTERACTION_PREVIEW_MAX)}…（详情查看完整内容）`;
+function appendLogPreview(current, value, maxLength) {
+  if (typeof value !== 'string' || value.length === 0 || current.length >= maxLength) return current;
+  const separator = current ? '\n' : '';
+  const available = maxLength - current.length - separator.length;
+  if (available <= 0) return current;
+  return `${current}${separator}${value.length > available ? `${value.slice(0, Math.max(0, available - 1))}…` : value}`;
 }
 
-function lastUserInput(log) {
-  const messages = log.request?.messages;
-  if (!Array.isArray(messages)) return logInteractionPreview(log.request?.input);
-  for (let index = messages.length - 1; index >= 0; index--) {
-    if (messages[index]?.role === 'user') return logInteractionPreview(messages[index].content);
+function previewTextContent(content, maxLength = LOG_INTERACTION_PREVIEW_MAX) {
+  if (typeof content === 'string') return appendLogPreview('', content, maxLength);
+  if (!Array.isArray(content)) return '';
+  let text = '';
+  for (let index = 0; index < Math.min(content.length, MAX_LOG_CONTENT_BLOCKS); index++) {
+    const block = content[index];
+    if (typeof block === 'string') {
+      text = appendLogPreview(text, block, maxLength);
+      continue;
+    }
+    if (!block || typeof block !== 'object') continue;
+    const type = block.type;
+    if (type === 'tool_result' || type === 'tool_use_result' || type === 'tool_use' || type === 'function_call' || type === 'function_call_output') continue;
+    text = appendLogPreview(text, typeof block.text === 'string' ? block.text : '', maxLength);
   }
-  return '';
+  return text;
+}
+
+function previewToolResultContent(content) {
+  if (!Array.isArray(content)) return '';
+  let text = '';
+  for (let index = 0; index < Math.min(content.length, MAX_LOG_CONTENT_BLOCKS); index++) {
+    const block = content[index];
+    if (!block || typeof block !== 'object') continue;
+    if (block.type !== 'tool_result' && block.type !== 'tool_use_result' && block.type !== 'function_call_output') continue;
+    const result = typeof block.content === 'string' ? block.content : block.output;
+    if (typeof result === 'string') text = appendLogPreview(text, result, LOG_INTERACTION_PREVIEW_MAX);
+    else if (Array.isArray(result)) text = appendLogPreview(text, previewTextContent(result), LOG_INTERACTION_PREVIEW_MAX);
+  }
+  return text;
+}
+
+function requestInteractionSummary(log) {
+  const empty = { label: '', color: '', content: '' };
+  const request = log.request;
+  if (!request || typeof request !== 'object') return empty;
+  const items = Array.isArray(request.messages) ? request.messages : Array.isArray(request.input) ? request.input : null;
+  if (!items) return typeof request.input === 'string'
+    ? { label: 'User 输入', color: '#2563eb', content: appendLogPreview('', request.input, LOG_INTERACTION_PREVIEW_MAX) }
+    : empty;
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index];
+    if (!item || typeof item !== 'object' || item.role === 'system') continue;
+    if (item.role === 'tool' || item.type === 'function_call_output') {
+      const content = previewTextContent(item.content ?? item.output);
+      if (content) return { label: '工具结果', color: '#d97706', content };
+    }
+    if (item.role === 'user') {
+      const toolResult = previewToolResultContent(item.content);
+      if (toolResult) return { label: '工具结果', color: '#d97706', content: toolResult };
+      const content = previewTextContent(item.content);
+      if (content) return { label: 'User 输入', color: '#2563eb', content };
+    }
+    if (item.role === 'assistant' || item.type === 'function_call') {
+      const content = previewTextContent(item.content);
+      if (content) return { label: 'Assistant 上下文', color: '#a78bfa', content };
+    }
+  }
+  return empty;
 }
 
 function responseOutput(log) {
   const response = log.response;
-  if (!response || typeof response !== 'object') return logInteractionPreview(response);
-  if (response.assistantText) return logInteractionPreview(response.assistantText);
-  if (response.message?.content) return logInteractionPreview(response.message.content);
-  if (response.choices?.[0]?.message?.content) return logInteractionPreview(response.choices[0].message.content);
-  if (Array.isArray(response.content)) {
-    let text = '';
-    for (const block of response.content) {
-      if (block?.type === 'text' && typeof block.text === 'string') text += block.text;
-      if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
-    }
-    if (text) return logInteractionPreview(text);
-  }
+  if (!response || typeof response !== 'object') return typeof response === 'string' ? appendLogPreview('', response, LOG_INTERACTION_PREVIEW_MAX) : '';
+  if (typeof response.assistantText === 'string') return appendLogPreview('', response.assistantText, LOG_INTERACTION_PREVIEW_MAX);
+  if (response.message?.content) return previewTextContent(response.message.content);
+  if (response.choices?.[0]?.message?.content) return previewTextContent(response.choices[0].message.content);
+  if (Array.isArray(response.content)) return previewTextContent(response.content);
   if (Array.isArray(response.output)) {
     let text = '';
-    for (const item of response.output) {
-      if (!Array.isArray(item?.content)) continue;
-      for (const block of item.content) {
-        if ((block?.type === 'output_text' || block?.type === 'text') && typeof block.text === 'string') text += block.text;
-        if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
-      }
-      if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
+    for (let index = 0; index < Math.min(response.output.length, MAX_LOG_CONTENT_BLOCKS); index++) {
+      text = appendLogPreview(text, previewTextContent(response.output[index]?.content), LOG_INTERACTION_PREVIEW_MAX);
     }
-    if (text) return logInteractionPreview(text);
+    if (text) return text;
   }
-  return logInteractionPreview(response.response);
+  return typeof response.response === 'string' ? appendLogPreview('', response.response, LOG_INTERACTION_PREVIEW_MAX) : '';
 }
 
 function renderLogInteraction(log) {
-  const input = lastUserInput(log);
+  const request = requestInteractionSummary(log);
   const output = responseOutput(log);
-  const thinking = logInteractionPreview(log.response?.thinking);
-  if (!input && !output && !thinking) return '';
+  const thinking = typeof log.response?.thinking === 'string' ? appendLogPreview('', log.response.thinking, LOG_INTERACTION_PREVIEW_MAX) : '';
+  const item = (label, color, content) => content ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px"><div class="dist-cat-label" style="color:${color}">${label}</div><div class="message-content log-interaction-content">${escapeHtml(content)}</div></div>` : '';
+  if (!request.content && !thinking && !output) return '';
   return `<div class="dist-categories" style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a2a">
-    ${input ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start"><div class="dist-cat-label" style="color:#2563eb">User 最后输入</div><div class="message-content log-interaction-content">${escapeHtml(input)}</div></div>` : ''}
-    ${thinking ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px"><div class="dist-cat-label" style="color:#7c3aed">Thinking</div><div class="message-content log-interaction-content">${escapeHtml(thinking)}</div></div>` : ''}
-    ${output ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px"><div class="dist-cat-label" style="color:#059669">Response</div><div class="message-content log-interaction-content">${escapeHtml(output)}</div></div>` : ''}
+    ${item(request.label, request.color, request.content)}
+    ${item('Thinking', '#7c3aed', thinking)}
+    ${item('Response', '#059669', output)}
   </div>`;
 }
 
@@ -2608,17 +2807,8 @@ function toggleDetail(logId) {
   document.getElementById('panelOverlay').classList.add('open');
   document.getElementById('panelTitle').textContent = `${log.method} ${log.path}`;
   const panelBody = document.getElementById('panelBody');
-  panelBody.innerHTML = '<div class="token-dashboard-loading">正在加载详情…</div>';
-  requestAnimationFrame(() => {
-    if (generation !== detailRenderGeneration || expandedLogId !== logId) return;
-    const key = `${logId}:${viewModes[logId] || 'friendly'}`;
-    let detail = logAnalysisCache.get(key);
-    if (!detail) {
-      detail = renderDetailContent(log);
-      logAnalysisCache.set(key, detail);
-    }
-    panelBody.innerHTML = detail;
-  });
+  showDetailLoading(panelBody, '正在打开详情…');
+  void renderDetailAsync(log, generation);
 }
 
 function closePanel() {

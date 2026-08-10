@@ -34,7 +34,13 @@ const PROVIDER_NAME_RULES = [
 ] as const;
 
 export function processProviderName(baseUrl: string): string {
-    return PROVIDER_NAME_RULES.find(([match]) => baseUrl.includes(match))?.[1] ?? "unknown";
+    const matched = PROVIDER_NAME_RULES.find(([match]) => baseUrl.includes(match))?.[1];
+    if (matched) return matched;
+    try {
+        return new URL(baseUrl).hostname || "unknown";
+    } catch {
+        return "unknown";
+    }
 }
 
 export function detectUpstreamFormat(baseUrl: string): ApiFormat {

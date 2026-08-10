@@ -157,7 +157,7 @@ function parseSseRecords(raw: string): SseRecord[] {
 
 function summarizeSseForLog(raw: string): Record<string, unknown> {
         const records = parseSseRecords(raw);
-        const summary = accumulateSseForAnthropicLog(records);
+        const summary = accumulateSseForLog(records);
         const thinking = summary.thinking.join("");
         const text = summary.text.join("");
         return {
@@ -183,77 +183,73 @@ function summarizeSseForLog(raw: string): Record<string, unknown> {
         };
     }
 
-    /** 扫一遍 SSE 帧，只保留日志需要的信息 */
-function accumulateSseForAnthropicLog(records: SseRecord[]) {
+    /** 扫一遍三种协议的 SSE 帧，只保留日志与统计需要的信息。 */
+function accumulateSseForLog(records: SseRecord[]) {
         const sseEventCounts: Record<string, number> = {};
         const dataTypeCounts: Record<string, number> = {};
         let message: Record<string, string> | undefined;
-        let usage: unknown;
+        let usage: Record<string, unknown> | undefined;
         let stopReason: unknown;
         const thinking: string[] = [];
         const text: string[] = [];
         const toolCalls: Array<{ name: string; id?: string; inputJson: string }> = [];
         let currentToolCall: { name: string; id?: string; inputJson: string } | null = null;
 
+        const mergeUsage = (value: unknown) => {
+            if (!value || typeof value !== "object" || Array.isArray(value)) return;
+            usage = { ...usage, ...value as Record<string, unknown> };
+        };
+
         for (const { sseEvent, parsed } of records) {
             sseEventCounts[sseEvent] = (sseEventCounts[sseEvent] ?? 0) + 1;
-            if (typeof parsed !== "object" || parsed === null) {
-                continue;
-            }
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) continue;
             const data = parsed as Record<string, unknown>;
             const type = data.type;
-            if (typeof type === "string") {
-                dataTypeCounts[type] = (dataTypeCounts[type] ?? 0) + 1;
+            if (typeof type === "string") dataTypeCounts[type] = (dataTypeCounts[type] ?? 0) + 1;
+
+            // Chat Completions carries usage on a final chunk without a typed event.
+            mergeUsage(data.usage);
+            // Responses carries the authoritative usage inside its terminal response snapshot.
+            const terminalResponse = data.response;
+            if (terminalResponse && typeof terminalResponse === "object" && !Array.isArray(terminalResponse)) {
+                mergeUsage((terminalResponse as Record<string, unknown>).usage);
             }
+
             switch (type) {
                 case "message_start": {
                     const startMessage = data.message;
-                    if (!startMessage || typeof startMessage !== "object") {
-                        break;
-                    }
+                    if (!startMessage || typeof startMessage !== "object" || Array.isArray(startMessage)) break;
                     const nextMessage: Record<string, string> = {};
                     const detail = startMessage as Record<string, unknown>;
-                    if (typeof detail.id === "string") {
-                        nextMessage.id = detail.id;
-                    }
-                    if (typeof detail.model === "string") {
-                        nextMessage.model = detail.model;
-                    }
-                    if (Object.keys(nextMessage).length > 0) {
-                        message = nextMessage;
-                    }
+                    if (typeof detail.id === "string") nextMessage.id = detail.id;
+                    if (typeof detail.model === "string") nextMessage.model = detail.model;
+                    if (Object.keys(nextMessage).length > 0) message = nextMessage;
+                    mergeUsage(detail.usage);
                     break;
                 }
                 case "message_delta":
-                    if (data.usage !== undefined) {
-                        usage = data.usage;
+                    mergeUsage(data.usage);
+                    if (data.stop_reason !== undefined) stopReason = data.stop_reason;
+                    if (data.delta && typeof data.delta === "object" && !Array.isArray(data.delta)) {
+                        const delta = data.delta as Record<string, unknown>;
+                        if (delta.stop_reason !== undefined) stopReason = delta.stop_reason;
                     }
                     break;
                 case "message_stop":
-                    if (data.stop_reason !== undefined) {
-                        stopReason = data.stop_reason;
-                    }
+                    if (data.stop_reason !== undefined) stopReason = data.stop_reason;
                     break;
                 case "content_block_delta": {
                     const delta = data.delta;
-                    if (!delta || typeof delta !== "object") {
-                        break;
-                    }
+                    if (!delta || typeof delta !== "object" || Array.isArray(delta)) break;
                     const detail = delta as Record<string, unknown>;
-                    if (detail.type === "thinking_delta" && typeof detail.thinking === "string" && detail.thinking.trim().length > 0) {
-                        thinking.push(detail.thinking);
-                    }
-                    if (detail.type === "text_delta" && typeof detail.text === "string" && detail.text.trim().length > 0) {
-                        text.push(detail.text);
-                    }
-                    if (detail.type === "input_json_delta" && typeof detail.partial_json === "string" && currentToolCall) {
-                        currentToolCall.inputJson += detail.partial_json;
-                    }
+                    if (detail.type === "thinking_delta" && typeof detail.thinking === "string" && detail.thinking.trim().length > 0) thinking.push(detail.thinking);
+                    if (detail.type === "text_delta" && typeof detail.text === "string" && detail.text.trim().length > 0) text.push(detail.text);
+                    if (detail.type === "input_json_delta" && typeof detail.partial_json === "string" && currentToolCall) currentToolCall.inputJson += detail.partial_json;
                     break;
                 }
                 case "content_block_start": {
                     const block = data.content_block;
-                    if (block && typeof block === "object" && (block as Record<string, unknown>).type === "tool_use") {
+                    if (block && typeof block === "object" && !Array.isArray(block) && (block as Record<string, unknown>).type === "tool_use") {
                         const detail = block as Record<string, unknown>;
                         currentToolCall = {
                             name: typeof detail.name === "string" ? detail.name : "unknown",
@@ -263,13 +259,12 @@ function accumulateSseForAnthropicLog(records: SseRecord[]) {
                     }
                     break;
                 }
-                case "content_block_stop": {
+                case "content_block_stop":
                     if (currentToolCall) {
                         toolCalls.push(currentToolCall);
                         currentToolCall = null;
                     }
                     break;
-                }
             }
         }
 

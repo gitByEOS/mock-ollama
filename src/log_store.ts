@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { extractTokenUsage, recordTokenUsageAsync } from "./token_store";
 
 export type LogEntry = {
     id: number;
@@ -9,6 +10,8 @@ export type LogEntry = {
     sessionId?: string;
     cacheScope?: string;
     model?: string;
+    upstream?: string;
+    userAgent?: string;
     duration?: number;
     status?: number;
     error?: string;
@@ -121,6 +124,20 @@ export function addLogEntry(entry: Omit<LogEntry, "id">): LogEntry {
     }
     logEntries.push(fullEntry);
     if (logEntries.length > 200) logEntries.shift();
+    if (fullEntry.method === "POST") {
+        const usage = extractTokenUsage(fullEntry.response);
+        if (usage) {
+            recordTokenUsageAsync({
+                occurredAt: new Date().toISOString(),
+                model: fullEntry.model ?? "unknown",
+                upstream: fullEntry.upstream ?? "unknown",
+                userAgent: fullEntry.userAgent?.trim() || "unknown",
+                durationMs: fullEntry.duration ?? 0,
+                status: fullEntry.status ?? 0,
+                ...usage,
+            });
+        }
+    }
     broadcastToSseClients("new-log", fullEntry);
     return fullEntry;
 }

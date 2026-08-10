@@ -38,6 +38,7 @@ coverage/
 # Temporary files
 *.tmp
 .cache/
+.mock-ollama/
 test/
 tsx-*/
 mock-ollama-*.tgz

@@ -8,6 +8,7 @@ import { hideBin } from "yargs/helpers";
 import { startCursorServer } from "./cursor_server";
 import { createApp } from "./router";
 import { configureProvider } from "./provider";
+import { closeTokenUsageStore } from "./token_store";
 import { dumpObject, maskSecret, setObjectDumpQuiet } from "./utils";
 
 if (existsSync(".env")) loadEnvFile();
@@ -133,7 +134,7 @@ export async function main() {
     }
 
     const app = createApp(context);
-    serve(
+    const server = serve(
         {
             fetch: app.fetch,
             hostname: host,
@@ -159,6 +160,23 @@ export async function main() {
     console.log(`上游服务商配置:\n${context.config.name}, ${context.config.apiStyle}→${context.upstreamFormat}, bridge=${context.bridge}, ${context.config.baseUrl}, ${maskSecret(context.config.apikey)}`);
     console.log(`网页上下文上限: ${context.contextLength} tokens`);
     dumpObject("ApiPathConfig", context.config.apiPath);
+
+    let stopping = false;
+    const stop = async (signal: NodeJS.Signals) => {
+        if (stopping) return;
+        stopping = true;
+        console.log(`收到 ${signal}，正在刷新 Token 统计`);
+        server.close();
+        try {
+            await closeTokenUsageStore();
+            process.exit(0);
+        } catch (error) {
+            console.error("关闭 Token 统计失败:", error);
+            process.exit(1);
+        }
+    };
+    process.once("SIGINT", () => void stop("SIGINT"));
+    process.once("SIGTERM", () => void stop("SIGTERM"));
 }
 
 if (require.main === module) {

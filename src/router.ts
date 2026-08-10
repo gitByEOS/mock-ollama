@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { name } from "../package.json";
 import { dispatchMatrix as conversionMatrix, runConversion, type ApiFormat, type ConversionPair } from "./bridge/matrix";
 import { addLogEntry, clearLogEntries, getLogEntries, sseClients } from "./log_store";
+import { getTokenDashboard, getTokenRequests } from "./token_store";
 import { createProviderContext, type ProviderContext } from "./provider";
 import { upstreamClient, upstreamRequest } from "./upstream";
 import {
@@ -99,6 +100,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
     const sessionId = requestSessionId(c.req.raw, body);
     const cacheScope = requestCacheScope(routePath, body);
     const chooseModel = body.model ?? "unknown";
+    const userAgent = c.req.raw.headers.get("user-agent") ?? "unknown";
+    const upstream = context.config.name;
 
     console.log(`[${timeNow}] [请求] POST ${routePath} from model ${chooseModel}`);
 
@@ -120,7 +123,7 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
 
         if (isSseContentType(contentType) && res.body) { // SSE 响应处理
             const [clientBody, logBody] = res.body.tee();
-            const duration = Date.now() - startTime;
+            const timeToFirstByteMs = Date.now() - startTime;
 
             void readStreamToText(logBody)
                 .then((rawText) => {
@@ -137,7 +140,9 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
                         sessionId,
                         cacheScope,
                         model: chooseModel,
-                        duration,
+                        upstream,
+                        userAgent,
+                        duration: Date.now() - startTime,
                         status: res.status,
                         request: body,
                         response: responseBody,
@@ -152,6 +157,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
                         sessionId,
                         cacheScope,
                         model: chooseModel,
+                        upstream,
+                        userAgent,
                         duration: Date.now() - startTime,
                         status: res.status,
                         request: body,
@@ -159,7 +166,7 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
                     });
                 });
 
-            console.log(`[${currentTime()}] [响应] ${routePath} (耗时: ${duration}ms)`);
+            console.log(`[${currentTime()}] [响应] ${routePath} (首字节: ${timeToFirstByteMs}ms)`);
             return new Response(clientBody, {
                 status: res.status,
                 headers: responseHeaders,
@@ -184,6 +191,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
             sessionId,
             cacheScope,
             model: chooseModel,
+            upstream,
+            userAgent,
             duration,
             status: res.status,
             request: body,
@@ -205,6 +214,8 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
             sessionId,
             cacheScope,
             model: chooseModel,
+            upstream,
+            userAgent,
             duration,
             status: 500,
             request: body,
@@ -218,6 +229,7 @@ async function convertedRequestWithLog(
     c: any,
     routePath: string,
     handler: (request: Request) => Promise<Response>,
+    upstream: string,
 ) {
     const startTime = Date.now();
     const timeNow = currentTime();
@@ -226,6 +238,7 @@ async function convertedRequestWithLog(
     const sessionId = requestSessionId(request, requestBody);
     const cacheScope = requestCacheScope(routePath, requestBody);
     const model = objectModel(requestBody);
+    const userAgent = request.headers.get("user-agent") ?? "unknown";
     console.log(`[${timeNow}] [请求] POST ${routePath} from model ${model}`);
     try {
         const response = await handler(request);
@@ -240,6 +253,8 @@ async function convertedRequestWithLog(
                     sessionId,
                     cacheScope,
                     model,
+                    upstream,
+                    userAgent,
                     duration: Date.now() - startTime,
                     status: response.status,
                     request: requestBody,
@@ -261,6 +276,8 @@ async function convertedRequestWithLog(
             sessionId,
             cacheScope,
             model,
+            upstream,
+            userAgent,
             duration: Date.now() - startTime,
             status: response.status,
             request: requestBody,
@@ -275,6 +292,8 @@ async function convertedRequestWithLog(
             sessionId,
             cacheScope,
             model,
+            upstream,
+            userAgent,
             duration: Date.now() - startTime,
             status: 500,
             request: requestBody,
@@ -305,6 +324,7 @@ function convertedHandler(pair: ConversionPair, context: ProviderContext): Matri
         c,
         routePath,
         (request) => runConversion(request, upstreamClient(conversionConfig(context)), pair),
+        context.config.name,
     );
 }
 
@@ -377,6 +397,23 @@ app.get("/api/logs", (c) => {
     return c.json(getLogEntries(limit));
 });
 
+// Token 使用量仪表盘：日趋势读取预聚合表，小时趋势只扫描当天原始记录。
+app.get("/api/token-usage", (c) => {
+    const days = parseInt(c.req.query("days") || "7", 10);
+    return c.json(getTokenDashboard(Number.isFinite(days) ? days : 7));
+});
+
+app.get("/api/token-usage/requests", (c) => {
+    const days = parseInt(c.req.query("days") || "7", 10);
+    const limit = parseInt(c.req.query("limit") || "50", 10);
+    const offset = parseInt(c.req.query("offset") || "0", 10);
+    return c.json(getTokenRequests(
+        Number.isFinite(days) ? days : 7,
+        Number.isFinite(limit) ? limit : 50,
+        Number.isFinite(offset) ? offset : 0,
+    ));
+});
+
 // 清空日志
 app.delete("/api/logs", (c) => {
     clearLogEntries();
@@ -385,6 +422,7 @@ app.delete("/api/logs", (c) => {
 
 // SSE 实时推送日志
 app.get("/api/logs/stream", (c) => {
+    let streamClient: { write: (data: string) => void } | undefined;
     const stream = new ReadableStream({
         start(controller) {
             const encoder = new TextEncoder();
@@ -397,16 +435,14 @@ app.get("/api/logs/stream", (c) => {
                     }
                 }
             };
+            streamClient = client;
             sseClients.add(client);
 
             // 发送初始连接成功消息
             controller.enqueue(encoder.encode(': connected\n\n'));
         },
         cancel() {
-            // 客户端断开时清理
-            for (const client of sseClients) {
-                sseClients.delete(client);
-            }
+            if (streamClient) sseClients.delete(streamClient);
         }
     });
 

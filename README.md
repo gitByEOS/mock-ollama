@@ -77,6 +77,7 @@ mock-ollama --url <上游地址> --apikey <上游密钥>
 
 - `MOCK_OLLAMA_BASE_URL`：上游服务地址
 - `MOCK_OLLAMA_API_KEY`：上游服务密钥
+- `MOCK_OLLAMA_TOKEN_DB_PATH`：Token 统计 SQLite 文件路径；默认是启动目录下的 `.mock-ollama/token-usage.db`
 
 示例：
 
@@ -145,6 +146,8 @@ mock-ollama --cursor
 - `GET /api/logs`：请求日志
 - `DELETE /api/logs`：清空请求日志
 - `GET /api/logs/stream`：日志 SSE 推送
+- `GET /api/token-usage`：持久化 Token 使用量仪表盘数据（支持 `days=1..90`）
+- `GET /api/token-usage/requests`：逐请求 Token 明细（支持 `days=1/7/30`、`limit`、`offset`）
 - `POST /api/show`：Ollama discovery/metadata
 - `GET /api/tags`：Ollama discovery/metadata
 - `POST /chat/completions`：Chat Completions
@@ -162,6 +165,7 @@ mock-ollama --cursor
 - **实时推送**：SSE 实时接收新请求，自动刷新列表
 - **会话标识**：日志卡片标题显示完整会话 ID；未提供时显示“无会话标识”
 - **Token 分布条**：可视化展示 System/User/Assistant/Thinking/Response 等各部分占比
+- **Token 统计**：右上角按需打开；SQLite 以 WAL 模式保存原始记录与按日、模型、上游聚合，展示今日概览、小时/日趋势、缓存构成、模型分布，以及支持 1d/7d/30d 分页的逐请求明细
 - **Cache 监控**：显示缓存命中情况，仅与同一会话的上一条 POST 请求比较；缓存下降时红色警告
 - **友好视图**：解析请求/响应，展示关键信息
 - **原始数据**：一键复制完整 JSON 数据

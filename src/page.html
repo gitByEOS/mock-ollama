@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>mock-ollama</title>
 <script src="https://unpkg.com/gpt-tokenizer/dist/cl100k_base.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -206,6 +207,97 @@ body {
 
 .btn:hover { border-color: #555; color: #fff; }
 
+.token-dashboard {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  padding: 32px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(5px);
+}
+.token-dashboard.open { display: block; }
+.token-dashboard-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid #343434;
+  border-radius: 16px;
+  background: #151515;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+}
+.token-dashboard-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.token-dashboard-close { flex:0 0 auto; align-self:flex-start; }
+.token-dashboard-title { font-size:20px; font-weight:700; color:#f3f4f6; }
+.token-dashboard-subtitle { margin-top:5px; color:#777; font-size:12px; }
+.token-overview-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:12px; margin-bottom:24px; }
+.token-stat-card, .token-chart-card {
+  border:1px solid #2d2d2d;
+  border-radius:12px;
+  background:#1b1b1b;
+}
+.token-stat-card { min-height:102px; padding:16px; }
+.token-stat-label { color:#888; font-size:12px; line-height:1.35; }
+.token-stat-value { margin-top:10px; color:#f3f4f6; font-size:22px; font-weight:650; letter-spacing:-.4px; }
+.token-chart-grid { display:grid; grid-template-columns:minmax(0, 1.5fr) minmax(280px, .8fr); gap:16px; }
+.token-chart-card { min-height:320px; padding:16px; }
+.token-chart-card.wide { grid-column:1 / -1; min-height:410px; }
+.token-chart-card.request-chart-card { min-width:0; }
+.token-chart-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.token-chart-title { color:#ddd; font-size:14px; font-weight:600; }
+.token-chart-total { margin-left:6px; color:#9ca3af; font-size:18px; font-weight:500; }
+.token-chart-range { margin-top:4px; color:#777; font-size:11px; font-weight:400; }
+.token-chart { position:relative; height:250px; }
+.token-chart.wide-chart { height:330px; }
+.token-chart-error { display:grid; height:100%; place-items:center; padding:24px; color:#fca5a5; font-size:12px; text-align:center; }
+.token-switch { display:flex; gap:4px; padding:3px; border:1px solid #333; border-radius:8px; }
+.token-switch button { border:0; border-radius:5px; padding:4px 8px; background:transparent; color:#888; font-size:12px; cursor:pointer; }
+.token-switch button:hover, .token-switch button:focus-visible { color:#fff; outline:2px solid #60a5fa; outline-offset:1px; }
+.token-switch button.active { color:#fff; background:#343434; }
+.token-dashboard-loading { padding:56px; color:#888; text-align:center; }
+body.token-dashboard-open { overflow:hidden; }
+.token-request-section { margin-top:16px; padding:16px; border:1px solid #2d2d2d; border-radius:12px; background:#1b1b1b; }
+.token-request-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+.token-request-meta { color:#777; font-size:12px; }
+.token-request-table { overflow-x:auto; }
+.token-request-head, .token-request-row { display:grid; grid-template-columns:190px minmax(220px, 1.35fr) 110px 110px 110px 110px; column-gap:18px; align-items:center; min-width:860px; }
+.token-request-head { padding:0 14px 10px; color:#777; font-size:12px; }
+.token-request-list { display:grid; gap:6px; }
+.token-request-row { min-height:68px; padding:11px 14px; border:1px solid #303030; border-radius:9px; background:#202020; }
+.token-request-row:hover { border-color:#3b3b3b; background:#252525; }
+.token-request-time, .token-request-model, .token-request-number { min-width:0; }
+.token-request-time { color:#c4c4c4; font-size:13px; white-space:nowrap; }
+.token-request-model strong { display:block; overflow:hidden; color:#e5e7eb; font-size:13px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.token-request-model span { display:block; overflow:hidden; margin-top:5px; color:#777; font-size:11px; text-overflow:ellipsis; white-space:nowrap; }
+.token-request-number { color:#d1d5db; font:13px 'SF Mono', monospace; text-align:right; }
+.token-request-number.total { color:#f3f4f6; font-weight:650; }
+.token-request-empty { padding:28px; color:#777; text-align:center; }
+.token-pagination { display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:12px; color:#777; font-size:12px; }
+.token-pagination button:disabled { opacity:.35; cursor:not-allowed; }
+.token-page-button { min-width:28px; height:28px; padding:0 6px; border:0; border-bottom:2px solid transparent; background:transparent; color:#888; font:inherit; cursor:pointer; }
+.token-page-button:hover { color:#fff; }
+.token-page-button:focus-visible { color:#fff; outline:1px solid #555; outline-offset:1px; }
+.token-page-button.active { border-bottom-color:#60a5fa; color:#fff; font-weight:650; }
+.token-page-nav { padding:4px 9px; }
+@media (max-width: 860px) {
+  .token-dashboard { padding:12px; }
+  .token-dashboard-inner { padding:16px; }
+  .token-overview-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .token-chart-grid { grid-template-columns:1fr; }
+  .token-chart-card.wide { grid-column:auto; }
+}
+@media (max-width: 520px) {
+  .token-dashboard-inner { padding:12px; }
+  .token-dashboard-header, .token-chart-heading, .token-request-toolbar { align-items:flex-start; flex-wrap:wrap; }
+  .token-overview-grid { grid-template-columns:1fr; }
+  .token-chart-card { padding:12px; }
+  .token-chart.wide-chart { height:290px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .token-dashboard *, .token-dashboard *::before, .token-dashboard *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+
 /* SVG 内嵌实现精确的旋转边框动画 */
 .btn.active-snake {
   position: relative;
@@ -259,6 +351,9 @@ body {
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.2s;
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 112px;
 }
 
 .log-card:hover { border-color: #3a3a3a; }
@@ -604,6 +699,12 @@ body {
   color: #e0e0e0;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.log-interaction-content {
+  width: 100%;
+  max-height: 120px;
+  overflow: auto;
 }
 
 .thinking-block {
@@ -1011,6 +1112,7 @@ body.panel-open { overflow: hidden; }
     </div>
   </div>
   <div class="header-controls">
+    <button class="btn" id="tokenUsageBtn" onclick="openTokenDashboard()">Token 统计</button>
     <button class="btn active-snake" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
       <svg class="snake-border-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
         <path d="M 14.5,0.5 L 85.5,0.5 A 14,14 0 0,1 99.5,14 L 99.5,85.5 A 14,14 0 0,1 85.5,99.5 L 14.5,99.5 A 14,14 0 0,1 0.5,85.5 L 0.5,14 A 14,14 0 0,1 14.5,0.5"/>
@@ -1018,6 +1120,20 @@ body.panel-open { overflow: hidden; }
       实时推送
     </button>
     <button class="btn" id="clearBtn" onclick="confirmClear()">清空</button>
+  </div>
+</div>
+
+<!-- Token 使用量仪表盘：仅在用户打开时请求统计数据 -->
+<div class="token-dashboard" id="tokenDashboard" role="dialog" aria-modal="true" aria-labelledby="tokenDashboardTitle">
+  <div class="token-dashboard-inner">
+    <div class="token-dashboard-header">
+      <div>
+        <div class="token-dashboard-title" id="tokenDashboardTitle">Token 使用量</div>
+        <div class="token-dashboard-subtitle">持久化统计 · 最近 7 天</div>
+      </div>
+      <button class="panel-close token-dashboard-close" aria-label="关闭 Token 使用量" onclick="closeTokenDashboard()">×</button>
+    </div>
+    <div id="tokenDashboardBody" class="token-dashboard-loading">加载统计中…</div>
   </div>
 </div>
 
@@ -1151,6 +1267,20 @@ let sseConnection = null;
 let expandedLogId = null;
 let viewModes = {}; // 存储每条日志的视图模式: 'friendly' 或 'raw'
 let appContextLength = 200000;
+let tokenTrendGranularity = 'daily';
+let tokenCharts = [];
+let tokenRequestPeriod = 7;
+let tokenRequestOffset = 0;
+let tokenRequestData = null;
+let tokenDashboardRequestId = 0;
+let tokenRequestRequestId = 0;
+let tokenDashboardTrigger = null;
+const MAX_VISIBLE_LOGS = 50;
+const MAX_REALTIME_LOGS_PER_FRAME = 10;
+const pendingRealtimeLogs = new Map();
+const logAnalysisCache = new Map();
+let realtimeLogFrame = null;
+let detailRenderGeneration = 0;
 
 async function loadAppInfo() {
   try {
@@ -1180,9 +1310,57 @@ document.addEventListener('DOMContentLoaded', async () => {
       const slidePanel = document.getElementById('slidePanel');
       if (slidePanel.classList.contains('open')) {
         closePanel();
+        return;
+      }
+      if (document.getElementById('tokenDashboard').classList.contains('open')) {
+        closeTokenDashboard();
       }
     }
   });
+});
+
+function trimCurrentLogs() {
+  if (!window.currentLogs) window.currentLogs = [];
+  if (window.currentLogs.length > MAX_VISIBLE_LOGS) window.currentLogs = window.currentLogs.slice(-MAX_VISIBLE_LOGS);
+  const visibleIds = new Set(window.currentLogs.map(log => log.id));
+  for (const key of logAnalysisCache.keys()) {
+    if (!visibleIds.has(Number(String(key).split(':', 1)[0]))) logAnalysisCache.delete(key);
+  }
+}
+
+function flushRealtimeLogs() {
+  realtimeLogFrame = null;
+  if (document.hidden || pendingRealtimeLogs.size === 0) return;
+  if (!window.currentLogs) window.currentLogs = [];
+  const knownIds = new Set(window.currentLogs.map(log => log.id));
+  const batch = [];
+  for (const [id, log] of pendingRealtimeLogs) {
+    pendingRealtimeLogs.delete(id);
+    if (!knownIds.has(id)) {
+      window.currentLogs.push(log);
+      knownIds.add(id);
+      batch.push(log);
+    }
+    if (batch.length >= MAX_REALTIME_LOGS_PER_FRAME) break;
+  }
+  trimCurrentLogs();
+  const container = document.getElementById('logContainer');
+  if (batch.length > 0) {
+    if (container.querySelector('.empty-state')) container.innerHTML = '';
+    container.insertAdjacentHTML('afterbegin', batch.reverse().map(renderSingleLogCard).join(''));
+    const cards = container.querySelectorAll('.log-card');
+    for (let index = MAX_VISIBLE_LOGS; index < cards.length; index++) cards[index].remove();
+  }
+  if (pendingRealtimeLogs.size > 0) scheduleRealtimeLogFlush();
+}
+
+function scheduleRealtimeLogFlush() {
+  if (document.hidden || realtimeLogFrame !== null) return;
+  realtimeLogFrame = requestAnimationFrame(flushRealtimeLogs);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) scheduleRealtimeLogFlush();
 });
 
 function startSseConnection() {
@@ -1194,57 +1372,22 @@ function startSseConnection() {
   sseConnection.addEventListener('new-log', (e) => {
     try {
       const newLog = JSON.parse(e.data);
-      // 追加到当前日志列表
-      if (!window.currentLogs) window.currentLogs = [];
-      window.currentLogs.push(newLog);
-
-      // 增量追加到页面（不重新渲染已有内容）
-      const container = document.getElementById('logContainer');
-      if (container.querySelector('.empty-state')) {
-        // 如果是空状态，先清除
-        container.innerHTML = '';
+      pendingRealtimeLogs.set(newLog.id, newLog);
+      while (pendingRealtimeLogs.size > MAX_VISIBLE_LOGS) {
+        pendingRealtimeLogs.delete(pendingRealtimeLogs.keys().next().value);
       }
-
-      // 渲染单个新卡片（插入到最前面）
-      const cardHtml = renderSingleLogCard(newLog);
-      container.insertAdjacentHTML('afterbegin', cardHtml);
-
-      // 延迟渲染分布条（单个日志直接用 requestIdleCallback）
-      const newCard = container.querySelector(`.log-card[data-log-id="${newLog.id}"]`);
-      if (newCard && newLog.method === 'POST') {
-        const placeholder = newCard.querySelector('.dist-bar-placeholder');
-        if (placeholder) {
-          const renderBar = () => {
-            try {
-              placeholder.outerHTML = `<div class="dist-bar-wrap">${buildDistBar(newLog)}</div>`;
-            } catch (err) {
-              console.error('buildDistBar error:', err);
-            }
-          };
-          if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(renderBar, { timeout: 100 });
-          } else {
-            setTimeout(renderBar, 50);
-          }
-        }
-      }
-
-      // 限制显示数量（移除超出的旧卡片）
-      if (window.currentLogs.length > 50) {
-        window.currentLogs = window.currentLogs.slice(-50);
-        const cards = container.querySelectorAll('.log-card');
-        if (cards.length > 50) {
-          for (let i = 50; i < cards.length; i++) {
-            cards[i].remove();
-          }
-        }
-      }
+      scheduleRealtimeLogFlush();
     } catch (err) {
       console.error('SSE new-log parse error:', err);
     }
   });
 
   sseConnection.addEventListener('clear-logs', () => {
+    pendingRealtimeLogs.clear();
+    logAnalysisCache.clear();
+    detailRenderGeneration++;
+    if (realtimeLogFrame !== null) cancelAnimationFrame(realtimeLogFrame);
+    realtimeLogFrame = null;
     window.currentLogs = [];
     expandedLogId = null;
     viewModes = {};
@@ -1270,6 +1413,9 @@ function stopSseConnection() {
     sseConnection.close();
     sseConnection = null;
   }
+  pendingRealtimeLogs.clear();
+  if (realtimeLogFrame !== null) cancelAnimationFrame(realtimeLogFrame);
+  realtimeLogFrame = null;
   updateStatus(false);
 }
 
@@ -1337,16 +1483,384 @@ async function clearLogs() {
   } catch (e) {}
 }
 
+function formatTokenMetric(value) {
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0);
+}
+
+function formatRate(value) {
+  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 }).format(value || 0)} tok/s`;
+}
+
+function destroyTokenCharts() {
+  tokenCharts.forEach(chart => chart.destroy());
+  tokenCharts = [];
+}
+
+function trendDatasets(items) {
+  const buckets = items.map(item => {
+    const input = Number(item.inputTokens || 0);
+    const output = Number(item.outputTokens || 0);
+    const cacheRead = Number(item.cacheReadTokens || 0);
+    const cacheCreation = Number(item.cacheCreationTokens || 0);
+    const cacheMiss = input - cacheRead;
+    const total = Number(item.totalTokens || 0);
+    if ([input, output, cacheRead, cacheCreation, total].some(value => !Number.isFinite(value) || value < 0)
+        || cacheRead + cacheCreation > input || input + output !== total) {
+      throw new Error(`Token 数据口径异常：${item.bucket}`);
+    }
+    return { ...item, input, output, cacheRead, cacheCreation, cacheMiss, total };
+  });
+  return {
+    buckets,
+    labels: buckets.map(item => tokenTrendGranularity === 'hourly' ? `${item.bucket.slice(11)}:00` : item.bucket.slice(5)),
+    cacheRead: buckets.map(item => item.cacheRead),
+    cacheMiss: buckets.map(item => item.cacheMiss),
+    output: buckets.map(item => item.output),
+    total: buckets.map(item => item.total),
+  };
+}
+
+function createTokenChart(canvas, config) {
+  if (!window.Chart) {
+    canvas.parentElement.innerHTML = '<div class="token-chart-error">图表组件加载失败，请检查网络后重试</div>';
+    return null;
+  }
+  const chart = new Chart(canvas, config);
+  tokenCharts.push(chart);
+  return chart;
+}
+
+function tokenTooltipTitle(bucket) {
+  if (tokenTrendGranularity === 'hourly') return `${bucket.bucket.slice(0, 10)} ${bucket.bucket.slice(11)}:00–${bucket.bucket.slice(11)}:59`;
+  return bucket.bucket;
+}
+
+function trendLabels(items) {
+  return items.map(item => tokenTrendGranularity === 'hourly' ? `${item.bucket.slice(11)}:00` : item.bucket.slice(5));
+}
+
+function renderRequestTrendChart(data) {
+  const chartHost = document.getElementById('requestTrendChartHost');
+  const totalNode = document.getElementById('requestTrendTotal');
+  if (!chartHost || !totalNode) return;
+  tokenCharts.filter(chart => chart.canvas?.id === 'requestTrendChart').forEach(chart => chart.destroy());
+  tokenCharts = tokenCharts.filter(chart => chart.canvas?.id !== 'requestTrendChart');
+  const items = data.trends?.[tokenTrendGranularity] || [];
+  const counts = items.map(item => Number(item.requestCount || 0));
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  totalNode.textContent = new Intl.NumberFormat('zh-CN').format(total);
+  if (!counts.some(Boolean)) {
+    chartHost.innerHTML = '<div class="token-request-empty">这段时间还没有 API 请求</div>';
+    return;
+  }
+  chartHost.innerHTML = '<canvas id="requestTrendChart" role="img" aria-label="API 请求次数面积图"></canvas>';
+  createTokenChart(document.getElementById('requestTrendChart'), {
+    type: 'line',
+    data: { labels: trendLabels(items), datasets: [{
+      label: 'API 请求次数', data: counts, borderColor: '#2878f0', backgroundColor: 'rgba(85,184,243,.58)',
+      borderWidth: 2, fill: true, tension: .34, pointRadius: 0, pointHoverRadius: 4,
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(25,25,25,.96)', padding: 12,
+          callbacks: {
+            title: contexts => tokenTooltipTitle(items[contexts[0].dataIndex]),
+            label: context => `请求次数  ${new Intl.NumberFormat('zh-CN').format(Number(context.raw || 0))}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#999', maxRotation: 0 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#999', precision: 0 }, grid: { color: '#323232' }, border: { display: false } },
+      },
+    },
+  });
+}
+
+function renderTokenTrendChart(data) {
+  const chartHost = document.getElementById('tokenTrendChartHost');
+  const totalNode = document.getElementById('tokenTrendTotal');
+  const rangeNode = document.getElementById('tokenTrendRange');
+  const hourButton = document.getElementById('tokenHourlyButton');
+  const dailyButton = document.getElementById('tokenDailyButton');
+  if (!chartHost || !totalNode || !rangeNode) return;
+  tokenCharts.filter(chart => chart.canvas?.id === 'tokenTrendChart').forEach(chart => chart.destroy());
+  tokenCharts = tokenCharts.filter(chart => chart.canvas?.id !== 'tokenTrendChart');
+  chartHost.innerHTML = '<canvas id="tokenTrendChart" role="img" aria-label="Token 用量堆叠柱状图"></canvas>';
+  hourButton?.classList.toggle('active', tokenTrendGranularity === 'hourly');
+  dailyButton?.classList.toggle('active', tokenTrendGranularity === 'daily');
+  hourButton?.setAttribute('aria-pressed', String(tokenTrendGranularity === 'hourly'));
+  dailyButton?.setAttribute('aria-pressed', String(tokenTrendGranularity === 'daily'));
+  const items = data.trends?.[tokenTrendGranularity] || [];
+  try {
+    const trend = trendDatasets(items);
+    const rangeTotal = trend.total.reduce((sum, value) => sum + value, 0);
+    totalNode.textContent = formatTokenMetric(rangeTotal);
+    rangeNode.textContent = tokenTrendGranularity === 'hourly'
+      ? `今日按小时 · ${data.range?.timezone || '服务端本地时间'}`
+      : `${data.range?.from || ''} 至 ${data.range?.to || ''} · ${data.range?.timezone || '服务端本地时间'}`;
+    if (!trend.total.some(Boolean)) {
+      chartHost.innerHTML = '<div class="token-request-empty">这段时间还没有 Token 用量</div>';
+      return;
+    }
+    const colors = ['#55b8f3', '#2878f0', '#34d399'];
+    createTokenChart(document.getElementById('tokenTrendChart'), {
+      type: 'bar',
+      data: { labels: trend.labels, datasets: [
+        { label: '输入（命中缓存）', data: trend.cacheRead, backgroundColor: colors[0], borderWidth: 0 },
+        { label: '输入（未命中缓存）', data: trend.cacheMiss, backgroundColor: colors[1], borderWidth: 0 },
+        { label: '输出', data: trend.output, backgroundColor: colors[2], borderWidth: 0, borderRadius: 3 },
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined,
+        interaction: { mode: 'index', intersect: false },
+        datasets: { bar: { categoryPercentage: .72, barPercentage: .82, maxBarThickness: 40 } },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#aaa', boxWidth: 10, boxHeight: 10, padding: 18 } },
+          tooltip: {
+            backgroundColor: 'rgba(25,25,25,.96)', padding: 14, boxPadding: 5,
+            callbacks: {
+              title: contexts => tokenTooltipTitle(trend.buckets[contexts[0].dataIndex]),
+              label: context => {
+                const total = trend.total[context.dataIndex];
+                const value = Number(context.raw || 0);
+                const percent = total > 0 ? ` · ${(value / total * 100).toFixed(1)}%` : '';
+                return `${context.dataset.label}  ${new Intl.NumberFormat('zh-CN').format(value)}${percent}`;
+              },
+              footer: contexts => {
+                const bucket = trend.buckets[contexts[0].dataIndex];
+                const created = bucket.cacheCreation > 0 ? `\n缓存写入  ${new Intl.NumberFormat('zh-CN').format(bucket.cacheCreation)}` : '';
+                return `总计  ${new Intl.NumberFormat('zh-CN').format(bucket.total)}${created}`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { stacked: true, ticks: { color: '#999', maxRotation: 0 }, grid: { display: false } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: '#999', callback: value => formatTokenMetric(value) }, grid: { color: '#323232' }, border: { display: false } },
+        },
+      },
+    });
+  } catch (error) {
+    totalNode.textContent = '—';
+    rangeNode.textContent = '';
+    chartHost.innerHTML = `<div class="token-chart-error">${escapeHtml(error.message || String(error))}</div>`;
+  }
+}
+
+function renderTokenDashboard(data) {
+  const overview = data.overview || {};
+  const body = document.getElementById('tokenDashboardBody');
+  body.className = '';
+  body.innerHTML = `
+    <div class="token-overview-grid">
+      <div class="token-stat-card"><div class="token-stat-label">今日 Token 用量</div><div class="token-stat-value">${formatTokenMetric(overview.totalTokens)}</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">今日请求数</div><div class="token-stat-value">${formatTokenMetric(overview.requestCount)}</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">活跃客户端数</div><div class="token-stat-value">${formatTokenMetric(overview.activeClients)}</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">Token 缓存命中率</div><div class="token-stat-value">${((overview.cacheHitRate || 0) * 100).toFixed(1)}%</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">平均生成速率</div><div class="token-stat-value">${formatRate(overview.tokensPerSecond)}</div></div>
+    </div>
+    <div class="token-chart-grid">
+      <section class="token-chart-card wide">
+        <div class="token-chart-heading">
+          <div><div class="token-chart-title">Tokens <span class="token-chart-total" id="tokenTrendTotal">—</span></div><div class="token-chart-range" id="tokenTrendRange"></div></div>
+          <div class="token-switch" role="group" aria-label="Token 趋势粒度"><button type="button" id="tokenHourlyButton" onclick="setTokenTrendGranularity('hourly')">按小时</button><button type="button" id="tokenDailyButton" onclick="setTokenTrendGranularity('daily')">按天</button></div>
+        </div>
+        <div class="token-chart wide-chart" id="tokenTrendChartHost"></div>
+      </section>
+      <section class="token-chart-card request-chart-card">
+        <div class="token-chart-heading"><div class="token-chart-title">API 请求次数 <span class="token-chart-total" id="requestTrendTotal">—</span></div></div>
+        <div class="token-chart" id="requestTrendChartHost"></div>
+      </section>
+      <section class="token-chart-card">
+        <div class="token-chart-heading"><div class="token-chart-title">模型分布</div></div>
+        <div class="token-chart"><canvas id="tokenModelChart" role="img" aria-label="模型 Token 分布"></canvas></div>
+      </section>
+    </div>
+    <section class="token-request-section">
+      <div class="token-request-toolbar">
+        <div><div class="token-chart-title">请求明细</div><div class="token-request-meta" id="tokenRequestMeta">加载中…</div></div>
+        <div class="token-switch"><button type="button" class="${tokenRequestPeriod === 1 ? 'active' : ''}" onclick="setTokenRequestPeriod(1)">1d</button><button type="button" class="${tokenRequestPeriod === 7 ? 'active' : ''}" onclick="setTokenRequestPeriod(7)">7d</button><button type="button" class="${tokenRequestPeriod === 30 ? 'active' : ''}" onclick="setTokenRequestPeriod(30)">30d</button></div>
+      </div>
+      <div class="token-request-table">
+        <div class="token-request-head" aria-hidden="true"><span>时间</span><span>模型 / 上游</span><span style="text-align:right">未缓存输入</span><span style="text-align:right">缓存读取</span><span style="text-align:right">输出</span><span style="text-align:right">总计</span></div>
+        <div class="token-request-list" id="tokenRequestList"><div class="token-request-empty">加载请求明细…</div></div>
+      </div>
+      <div class="token-pagination" id="tokenRequestPagination"></div>
+    </section>`;
+
+  destroyTokenCharts();
+  renderTokenTrendChart(data);
+  renderRequestTrendChart(data);
+  const palette = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#22d3ee'];
+  if ((data.models || []).some(item => item.totalTokens > 0)) {
+    createTokenChart(document.getElementById('tokenModelChart'), {
+      type: 'doughnut', data: { labels: (data.models || []).map(item => item.model), datasets: [{ data: (data.models || []).map(item => item.totalTokens), backgroundColor: (data.models || []).map((_, index) => palette[index % palette.length]), borderColor: '#1b1b1b', borderWidth: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined, plugins: { legend: { position: 'bottom', labels: { color: '#aaa', boxWidth: 10 } } } },
+    });
+  } else {
+    document.getElementById('tokenModelChart').parentElement.innerHTML = '<div class="token-request-empty">暂无模型数据</div>';
+  }
+  renderTokenRequestList(tokenRequestData);
+}
+
+function formatRequestTime(value) {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const part = type => parts.find(item => item.type === type)?.value || '';
+  return `${part('month')}月${part('day')}日 ${part('hour')}:${part('minute')}:${part('second')}`;
+}
+
+function renderTokenRequestList(data) {
+  const list = document.getElementById('tokenRequestList');
+  const meta = document.getElementById('tokenRequestMeta');
+  const pagination = document.getElementById('tokenRequestPagination');
+  if (!list || !meta || !pagination) return;
+  if (!data) {
+    meta.textContent = '加载中…';
+    list.innerHTML = '<div class="token-request-empty">加载请求明细…</div>';
+    pagination.innerHTML = '';
+    return;
+  }
+  meta.textContent = `最近 ${tokenRequestPeriod} 天 · 共 ${data.total} 次请求`;
+  if (!data.items?.length) {
+    list.innerHTML = '<div class="token-request-empty">这段时间还没有请求记录。</div>';
+    pagination.innerHTML = '';
+    return;
+  }
+  list.innerHTML = data.items.map(item => {
+    const uncached = (item.inputTokens || 0) - (item.cacheReadTokens || 0);
+    const validAccounting = uncached >= 0
+      && (item.cacheReadTokens || 0) + (item.cacheCreationTokens || 0) <= (item.inputTokens || 0)
+      && (item.inputTokens || 0) + (item.outputTokens || 0) === (item.totalTokens || 0);
+    if (!validAccounting) return `<article class="token-request-row"><div class="token-request-time">${formatRequestTime(item.occurredAt)}</div><div class="token-request-model"><strong>${escapeHtml(item.model)}</strong><span>${escapeHtml(item.upstream)}</span></div><div class="token-chart-error" style="grid-column:span 4">Token 数据口径异常</div></article>`;
+    return `<article class="token-request-row">
+      <time class="token-request-time" datetime="${escapeHtml(item.occurredAt)}">${formatRequestTime(item.occurredAt)}</time>
+      <div class="token-request-model"><strong title="${escapeHtml(item.model)}">${escapeHtml(item.model)}</strong><span title="${escapeHtml(item.upstream)}">${escapeHtml(item.upstream)}</span></div>
+      <div class="token-request-number">${formatTokenMetric(uncached)}</div>
+      <div class="token-request-number">${formatTokenMetric(item.cacheReadTokens)}</div>
+      <div class="token-request-number">${formatTokenMetric(item.outputTokens)}</div>
+      <div class="token-request-number total">${formatTokenMetric(item.totalTokens)}</div>
+    </article>`;
+  }).join('');
+  const hasPrevious = data.offset > 0;
+  const hasNext = data.offset + data.items.length < data.total;
+  const currentPage = Math.floor(data.offset / data.limit) + 1;
+  const totalPages = Math.ceil(data.total / data.limit);
+  const pageNumbers = tokenRequestPageNumbers(currentPage, totalPages);
+  const pageButtons = pageNumbers.map(page => `<button type="button" class="token-page-button${page === currentPage ? ' active' : ''}" onclick="changeTokenRequestPage(${page})"${page === currentPage ? ' aria-current="page"' : ''} aria-label="第 ${page} 页">${page}</button>`).join('');
+  pagination.innerHTML = `<button type="button" class="btn token-page-nav" onclick="changeTokenRequestPage(${currentPage - 1})" ${hasPrevious ? '' : 'disabled'}>上一页</button>${pageButtons}<button type="button" class="btn token-page-nav" onclick="changeTokenRequestPage(${currentPage + 1})" ${hasNext ? '' : 'disabled'}>下一页</button>`;
+}
+
+function tokenRequestPageNumbers(currentPage, totalPages, maxVisible = 9) {
+  if (totalPages <= 0) return [];
+  const visible = Math.min(totalPages, maxVisible);
+  const start = Math.min(Math.max(currentPage - Math.floor(visible / 2), 1), totalPages - visible + 1);
+  return Array.from({ length: visible }, (_, index) => start + index);
+}
+
+async function loadTokenRequests() {
+  const requestId = ++tokenRequestRequestId;
+  tokenRequestData = null;
+  renderTokenRequestList(null);
+  try {
+    const response = await fetch(`/api/token-usage/requests?days=${tokenRequestPeriod}&limit=20&offset=${tokenRequestOffset}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (requestId !== tokenRequestRequestId || !document.getElementById('tokenDashboard').classList.contains('open')) return;
+    tokenRequestData = data;
+    renderTokenRequestList(data);
+  } catch (error) {
+    if (requestId !== tokenRequestRequestId) return;
+    console.error('loadTokenRequests error:', error);
+    const list = document.getElementById('tokenRequestList');
+    if (list) list.innerHTML = '<div class="token-request-empty">请求明细加载失败。</div>';
+  }
+}
+
+async function loadTokenDashboard() {
+  const requestId = ++tokenDashboardRequestId;
+  const body = document.getElementById('tokenDashboardBody');
+  body.className = 'token-dashboard-loading';
+  body.textContent = '加载统计中…';
+  try {
+    const response = await fetch('/api/token-usage?days=7');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (requestId !== tokenDashboardRequestId || !document.getElementById('tokenDashboard').classList.contains('open')) return;
+    window.tokenDashboardData = data;
+    renderTokenDashboard(data);
+    void loadTokenRequests();
+  } catch (error) {
+    if (requestId !== tokenDashboardRequestId) return;
+    console.error('loadTokenDashboard error:', error);
+    body.textContent = '统计加载失败，请稍后重试。';
+  }
+}
+
+function openTokenDashboard() {
+  tokenDashboardTrigger = document.activeElement;
+  document.getElementById('tokenDashboard').classList.add('open');
+  document.body.classList.add('token-dashboard-open');
+  document.querySelector('#tokenDashboard .panel-close')?.focus();
+  void loadTokenDashboard();
+}
+
+function closeTokenDashboard() {
+  tokenDashboardRequestId++;
+  tokenRequestRequestId++;
+  document.getElementById('tokenDashboard').classList.remove('open');
+  document.body.classList.remove('token-dashboard-open');
+  destroyTokenCharts();
+  tokenDashboardTrigger?.focus?.();
+}
+
+function setTokenTrendGranularity(granularity) {
+  if (granularity !== 'daily' && granularity !== 'hourly') return;
+  tokenTrendGranularity = granularity;
+  if (window.tokenDashboardData) {
+    renderTokenTrendChart(window.tokenDashboardData);
+    renderRequestTrendChart(window.tokenDashboardData);
+  }
+}
+
+function setTokenRequestPeriod(days) {
+  tokenRequestPeriod = days;
+  tokenRequestOffset = 0;
+  document.querySelectorAll('.token-request-toolbar .token-switch button').forEach(button => {
+    const active = button.textContent === `${days}d`;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  void loadTokenRequests();
+}
+
+function changeTokenRequestPage(page) {
+  if (!tokenRequestData || !Number.isInteger(page)) return;
+  const totalPages = Math.ceil(tokenRequestData.total / tokenRequestData.limit);
+  if (page < 1 || page > totalPages) return;
+  tokenRequestOffset = (page - 1) * tokenRequestData.limit;
+  void loadTokenRequests();
+}
+
 function toggleViewMode(logId, mode) {
   viewModes[logId] = mode;
-  // 更新右侧面板内容
   const panelBody = document.getElementById('panelBody');
-  if (panelBody) {
-    const log = window.currentLogs?.find(l => l.id === logId);
-    if (log) {
-      panelBody.innerHTML = renderDetailContent(log);
-    }
+  const log = window.currentLogs?.find(l => l.id === logId);
+  if (!panelBody || !log) return;
+  const key = `${logId}:${mode}`;
+  let detail = logAnalysisCache.get(key);
+  if (!detail) {
+    detail = renderDetailContent(log);
+    logAnalysisCache.set(key, detail);
   }
+  panelBody.innerHTML = detail;
 }
 
 function parseSseResponse(response) {
@@ -1377,6 +1891,46 @@ function findPreviousSessionPost(log) {
   return null;
 }
 
+function renderAuthoritativeUsage(log, usage) {
+  const modelName = log.response?.message?.model || log.model || log.request?.model || 'unknown';
+  const uncachedInput = Math.max(0, usage.input - usage.cacheRead);
+  const barBase = Math.max(appContextLength || 0, usage.total, 1);
+  const pctOfBar = value => value / barBase * 100;
+  const cachePct = usage.input > 0 ? usage.cacheRead / usage.input * 100 : 0;
+  const inputPct = usage.input > 0 ? uncachedInput / usage.input * 100 : 0;
+  const outputPct = usage.total > 0 ? usage.output / usage.total * 100 : 0;
+  const freeTokens = Math.max(0, (appContextLength || usage.total) - usage.total);
+  const fmt = value => new Intl.NumberFormat('zh-CN').format(value);
+  const fmtPct = value => value.toFixed(2);
+  const barWidth = value => Math.max(5, Math.min(100, value));
+  const totalSummary = appContextLength
+    ? `${(usage.total / 1000).toFixed(2)}k/${(appContextLength / 1000).toFixed(0)}k tokens (${fmtPct(usage.total / appContextLength * 100)}%)`
+    : `${fmt(usage.total)} tokens`;
+  const cacheClass = log.cacheDrop ? 'dist-cat-cache-warning' : 'dist-cat-cache';
+  const cacheValueClass = log.cacheDrop ? 'dist-cat-value cache-warning' : 'dist-cat-value cache';
+  const durationSec = (log.duration || 0) / 1000;
+  const rate = usage.output > 0 && durationSec > 0 ? Math.round(usage.output / durationSec) : 0;
+
+  return `<div class="dist-bar-container">
+    <div class="dist-header"><div class="dist-model">${escapeHtml(modelName)}</div><div class="dist-total">${totalSummary}</div></div>
+    <div class="dist-bar">
+      ${usage.cacheRead > 0 ? `<div class="dist-seg seg-cache" style="width:${pctOfBar(usage.cacheRead)}%"></div>` : ''}
+      ${uncachedInput > 0 ? `<div class="dist-seg seg-user" style="width:${pctOfBar(uncachedInput)}%"></div>` : ''}
+      ${usage.output > 0 ? `<div class="dist-seg seg-text" style="width:${pctOfBar(usage.output)}%"></div>` : ''}
+      ${freeTokens > 0 ? `<div class="dist-seg seg-free" style="width:${pctOfBar(freeTokens)}%"></div>` : ''}
+    </div>
+    <div class="dist-categories">
+      <div class="dist-cat-label" style="margin-bottom:8px;color:#666">Messages</div>
+      ${usage.cacheRead > 0 || log.cacheDrop ? `<div class="dist-category ${cacheClass}"><div class="dist-cat-label">Cache</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-cache" style="width:${barWidth(cachePct)}%"></div></div><div class="${cacheValueClass}">${fmt(usage.cacheRead)} (${fmtPct(cachePct)}%)${log.cacheDrop ? ` 缓存读取下降 -${fmt(log.cacheDrop.lostTokens)}` : ''}</div></div>` : ''}
+      <div class="dist-category"><div class="dist-cat-label">Input</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-user" style="width:${barWidth(inputPct)}%"></div></div><div class="dist-cat-value blue">${fmt(uncachedInput)} (${fmtPct(inputPct)}%)</div></div>
+      <div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Output</div>
+      <div class="dist-category"><div class="dist-cat-label">Response</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-text" style="width:${barWidth(outputPct)}%"></div></div><div class="dist-cat-value green">${fmt(usage.output)} (${fmtPct(outputPct)}%)</div></div>
+      ${appContextLength ? `<div class="dist-cat-label" style="margin-top:12px;margin-bottom:8px;color:#666">Available</div><div class="dist-category"><div class="dist-cat-label">Free</div><div class="dist-cat-bar"><div class="dist-cat-fill seg-free" style="width:${barWidth(pctOfBar(freeTokens))}%"></div></div><div class="dist-cat-value">${fmt(freeTokens)} (${fmtPct(pctOfBar(freeTokens))}%)</div></div>` : ''}
+    </div>
+    <div class="dist-categories" style="margin-top:12px;padding-top:8px;border-top:1px solid #2a2a2a"><div class="dist-meta-line"><span class="dist-cat-label">耗时</span><span class="dist-cat-value orange">${log.duration ?? '-'}ms</span>${rate > 0 ? `<span class="dist-meta-sep">·</span><span class="dist-cat-label">Token速率</span><span class="dist-cat-value green">${rate} token/s</span>` : ''}</div></div>
+  </div>`;
+}
+
 function buildDistBar(log) {
   if (log.error) {
     return `<div class="dist-bar-container">
@@ -1386,8 +1940,10 @@ function buildDistBar(log) {
       </div>
     </div>`;
   }
+  const authoritativeUsage = normalizedLogUsage(log);
+  if (authoritativeUsage) return renderAuthoritativeUsage(log, authoritativeUsage);
 
-  // 分析请求消息
+  // 仅在上游没有 usage 时，按需估算单条详情的 Token 分布。
   const messages = log.request?.messages || [];
   const userMsgs = messages.filter(m => m.role === 'user');
   const assistantMsgs = messages.filter(m => m.role === 'assistant');
@@ -1832,8 +2388,8 @@ function renderDetailContent(log) {
   }
 
   if (mode === 'friendly') {
-    // 好友视图 - 响应在前，请求在后（倒序）
-    html += `<div class="friendly-view">`;
+    // 详情按需计算 Token 分布，不再让列表承担重型分词。
+    html += `<div class="friendly-view"><div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
     html += renderFriendlyResponse(log.response);
 
     // === 工具调用统计（所有历史） ===
@@ -1912,132 +2468,162 @@ function copyRawData(logId) {
   });
 }
 
-// 渲染单个日志卡片
-function renderSingleLogCard(log) {
-  const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
+function normalizedLogUsage(log) {
+  const usage = log.response?.usage;
+  if (!usage || typeof usage !== 'object') return null;
+  const rawInput = Number(usage.input_tokens ?? usage.prompt_tokens);
+  const output = Number(usage.output_tokens ?? usage.completion_tokens ?? 0);
+  const cacheRead = Number(usage.cache_read_input_tokens ?? usage.cache_read_tokens
+    ?? usage.input_tokens_details?.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? 0);
+  const cacheCreation = Number(usage.cache_creation_input_tokens ?? usage.cache_creation_tokens ?? 0);
+  if (![rawInput, output, cacheRead, cacheCreation].every(Number.isFinite)) return null;
+  const separatedCache = Object.hasOwn(usage, 'cache_read_input_tokens')
+    || Object.hasOwn(usage, 'cache_creation_input_tokens')
+    || Object.hasOwn(usage, 'cache_read_tokens')
+    || Object.hasOwn(usage, 'cache_creation_tokens');
+  const input = rawInput + (separatedCache ? cacheRead + cacheCreation : 0);
+  return { input, output, cacheRead, total: input + output };
+}
 
-  let html = `<div class="log-card" data-log-id="${log.id}">`;
+const LOG_INTERACTION_PREVIEW_MAX = 2000;
 
-  // 头部信息
-  html += `<div class="log-header">
-    <div class="log-time">${splitTime(log.time)}</div>
-    <div class="log-method ${log.method}">${log.method}</div>
-    <div class="log-path">${log.path}</div>
-    <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
-    <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span>${log.cacheDrop ? `<span class="log-status error">cache drop</span>` : ''}</div>
-    <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
+function logInteractionPreview(content) {
+  if (content === undefined || content === null) return '';
+  const text = getText(content);
+  return text.length <= LOG_INTERACTION_PREVIEW_MAX
+    ? text
+    : `${text.slice(0, LOG_INTERACTION_PREVIEW_MAX)}…（详情查看完整内容）`;
+}
+
+function lastUserInput(log) {
+  const messages = log.request?.messages;
+  if (!Array.isArray(messages)) return logInteractionPreview(log.request?.input);
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index]?.role === 'user') return logInteractionPreview(messages[index].content);
+  }
+  return '';
+}
+
+function responseOutput(log) {
+  const response = log.response;
+  if (!response || typeof response !== 'object') return logInteractionPreview(response);
+  if (response.assistantText) return logInteractionPreview(response.assistantText);
+  if (response.message?.content) return logInteractionPreview(response.message.content);
+  if (response.choices?.[0]?.message?.content) return logInteractionPreview(response.choices[0].message.content);
+  if (Array.isArray(response.content)) {
+    let text = '';
+    for (const block of response.content) {
+      if (block?.type === 'text' && typeof block.text === 'string') text += block.text;
+      if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
+    }
+    if (text) return logInteractionPreview(text);
+  }
+  if (Array.isArray(response.output)) {
+    let text = '';
+    for (const item of response.output) {
+      if (!Array.isArray(item?.content)) continue;
+      for (const block of item.content) {
+        if ((block?.type === 'output_text' || block?.type === 'text') && typeof block.text === 'string') text += block.text;
+        if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
+      }
+      if (text.length >= LOG_INTERACTION_PREVIEW_MAX) break;
+    }
+    if (text) return logInteractionPreview(text);
+  }
+  return logInteractionPreview(response.response);
+}
+
+function renderLogInteraction(log) {
+  const input = lastUserInput(log);
+  const output = responseOutput(log);
+  const thinking = logInteractionPreview(log.response?.thinking);
+  if (!input && !output && !thinking) return '';
+  return `<div class="dist-categories" style="margin-top:12px;padding-top:12px;border-top:1px solid #2a2a2a">
+    ${input ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start"><div class="dist-cat-label" style="color:#2563eb">User 最后输入</div><div class="message-content log-interaction-content">${escapeHtml(input)}</div></div>` : ''}
+    ${thinking ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px"><div class="dist-cat-label" style="color:#7c3aed">Thinking</div><div class="message-content log-interaction-content">${escapeHtml(thinking)}</div></div>` : ''}
+    ${output ? `<div class="dist-category" style="flex-direction:column;align-items:flex-start;margin-top:8px"><div class="dist-cat-label" style="color:#059669">Response</div><div class="message-content log-interaction-content">${escapeHtml(output)}</div></div>` : ''}
   </div>`;
+}
 
-  // 横向分布条占位（POST 请求延迟渲染）
-  if (log.method === 'POST') {
-    html += `<div class="dist-bar-wrap dist-bar-placeholder" data-log-id="${log.id}"><div class="dist-header"><div class="dist-model">加载中...</div></div></div>`;
+function renderLogDistribution(log) {
+  if (log.method !== 'POST') return '';
+  if (log.error) {
+    return `<div class="dist-bar-wrap"><div class="dist-bar-container">
+      <div class="dist-category">
+        <div class="dist-cat-label" style="color:#dc2626">错误</div>
+        <div class="dist-cat-value highlight" style="color:#dc2626">${escapeHtml(getText(log.error))}</div>
+      </div>
+    </div></div>`;
   }
 
-  html += `</div>`;
-  return html;
+  const usage = normalizedLogUsage(log);
+  const interaction = renderLogInteraction(log);
+  if (usage) return `<div class="dist-bar-wrap">${renderAuthoritativeUsage(log, usage)}${interaction}</div>`;
+
+  const model = log.response?.message?.model || log.model || log.request?.model || 'unknown';
+  return `<div class="dist-bar-wrap"><div class="dist-bar-container">
+    <div class="dist-header">
+      <div class="dist-model">${escapeHtml(model)}</div>
+      <div class="dist-total">Token 待分析</div>
+    </div>
+    <div class="dist-bar"><div class="dist-seg seg-free" style="width:100%"></div></div>
+    <div class="dist-categories">
+      <div class="dist-meta-line"><span class="dist-cat-label">耗时</span><span class="dist-cat-value orange">${log.duration ?? '-'}ms</span></div>
+    </div>
+  </div>${interaction}</div>`;
+}
+
+function renderSingleLogCard(log) {
+  const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
+  return `<div class="log-card" data-log-id="${log.id}">
+    <div class="log-header">
+      <div class="log-time">${splitTime(log.time)}</div>
+      <div class="log-method ${escapeHtml(log.method)}">${escapeHtml(log.method)}</div>
+      <div class="log-path">${escapeHtml(log.path)}</div>
+      <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
+      <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span>${log.cacheDrop ? '<span class="log-status error">cache drop</span>' : ''}</div>
+      <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
+    </div>
+    ${renderLogDistribution(log)}
+  </div>`;
 }
 
 function renderLogs(logs) {
-  window.currentLogs = logs; // 保存用于切换视图时查找
+  window.currentLogs = Array.isArray(logs) ? logs.slice(-MAX_VISIBLE_LOGS) : [];
   const container = document.getElementById('logContainer');
-
-  if (!logs || logs.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-text">等待请求...</div>
-      </div>
-    `;
+  if (window.currentLogs.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-text">等待请求...</div></div>';
     return;
   }
-
-  const reversed = [...logs].reverse();
-  let html = '';
-
-  for (const log of reversed) {
-    const statusClass = log.status >= 200 && log.status < 300 ? 'success' : 'error';
-
-    html += `<div class="log-card" data-log-id="${log.id}">`;
-
-    // 头部信息
-    html += `<div class="log-header">
-      <div class="log-time">${splitTime(log.time)}</div>
-      <div class="log-method ${log.method}">${log.method}</div>
-      <div class="log-path">${log.path}</div>
-      <div class="log-session" title="${escapeHtml(log.sessionId || '无会话标识')}">${escapeHtml(log.sessionId || '无会话标识')}</div>
-      <div><span class="log-status ${statusClass}">${log.status || (log.error ? 'ERR' : '-')}</span>${log.cacheDrop ? `<span class="log-status error">cache drop</span>` : ''}</div>
-      <button class="log-expand-btn" onclick="toggleDetail(${log.id}); event.stopPropagation();">详情</button>
-    </div>`;
-
-    // 横向分布条占位（POST 请求延迟渲染）
-    if (log.method === 'POST') {
-      html += `<div class="dist-bar-wrap dist-bar-placeholder" data-log-id="${log.id}"><div class="dist-header"><div class="dist-model">加载中...</div></div></div>`;
-    }
-
-    html += `</div>`;
-  }
-
-  container.innerHTML = html;
-
-  // 逐个异步渲染分布条，避免首次加载卡顿
-  renderDistBarsProgressively(logs, container);
-}
-
-// 异步逐个渲染分布条
-function renderDistBarsProgressively(logs, container) {
-  const placeholders = container.querySelectorAll('.dist-bar-placeholder');
-  const items = [];
-
-  placeholders.forEach(el => {
-    const logId = parseInt(el.dataset.logId);
-    const log = logs.find(l => l.id === logId);
-    if (log) {
-      items.push({ el, log });
-    }
-  });
-
-  if (items.length === 0) return;
-
-  let index = 0;
-  function renderNext() {
-    if (index >= items.length) return;
-    const { el, log } = items[index];
-    try {
-      el.outerHTML = `<div class="dist-bar-wrap">${buildDistBar(log)}</div>`;
-    } catch (e) {
-      console.error('buildDistBar error:', e);
-    }
-    index++;
-    if (index < items.length) {
-      // 使用 requestIdleCallback 或 setTimeout 间隔渲染
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(() => renderNext(), { timeout: 50 });
-      } else {
-        setTimeout(renderNext, 30);
-      }
-    }
-  }
-
-  // 首个延迟一点渲染，让页面先稳定
-  setTimeout(renderNext, 100);
+  container.innerHTML = [...window.currentLogs].reverse().map(renderSingleLogCard).join('');
 }
 
 function toggleDetail(logId) {
   const log = window.currentLogs?.find(l => l.id === logId);
   if (!log) return;
-
-  expandedLogId = logId; // 设置当前展开的日志 ID
-
-  // 打开右侧面板，禁止主页面滚动
+  expandedLogId = logId;
+  const generation = ++detailRenderGeneration;
   document.body.classList.add('panel-open');
   document.getElementById('slidePanel').classList.add('open');
   document.getElementById('panelOverlay').classList.add('open');
   document.getElementById('panelTitle').textContent = `${log.method} ${log.path}`;
-
-  // 渲染详情内容
-  document.getElementById('panelBody').innerHTML = renderDetailContent(log);
+  const panelBody = document.getElementById('panelBody');
+  panelBody.innerHTML = '<div class="token-dashboard-loading">正在加载详情…</div>';
+  requestAnimationFrame(() => {
+    if (generation !== detailRenderGeneration || expandedLogId !== logId) return;
+    const key = `${logId}:${viewModes[logId] || 'friendly'}`;
+    let detail = logAnalysisCache.get(key);
+    if (!detail) {
+      detail = renderDetailContent(log);
+      logAnalysisCache.set(key, detail);
+    }
+    panelBody.innerHTML = detail;
+  });
 }
 
 function closePanel() {
+  detailRenderGeneration++;
+  expandedLogId = null;
   document.body.classList.remove('panel-open');
   document.getElementById('slidePanel').classList.remove('open');
   document.getElementById('panelOverlay').classList.remove('open');
@@ -2169,28 +2755,40 @@ function tokenizeText(text) {
   }
 }
 
-// LCS diff 算法，返回差异标记
+const MAX_LCS_TOKENS_PER_SIDE = 2000;
+const MAX_LCS_MATRIX_CELLS = 2000000;
+
+function quickTokenDiff(tokensA, tokensB) {
+  let prefix = 0;
+  while (prefix < tokensA.length && prefix < tokensB.length && tokensA[prefix].id === tokensB[prefix].id) prefix++;
+  let suffix = 0;
+  while (suffix < tokensA.length - prefix && suffix < tokensB.length - prefix
+      && tokensA[tokensA.length - 1 - suffix].id === tokensB[tokensB.length - 1 - suffix].id) suffix++;
+  const mark = (tokens, changedStatus) => tokens.map((token, index) => ({
+    ...token,
+    status: index < prefix || index >= tokens.length - suffix ? 'same' : changedStatus,
+  }));
+  return { tokensA: mark(tokensA, 'removed'), tokensB: mark(tokensB, 'added'), degraded: true };
+}
+
+// 有界 LCS；超限时保留公共前后缀并降级，禁止制造无界主线程任务。
 function lcsDiff(tokensA, tokensB) {
   const m = tokensA.length;
   const n = tokensB.length;
-
-  // LCS 表
-  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  if (m > MAX_LCS_TOKENS_PER_SIDE || n > MAX_LCS_TOKENS_PER_SIDE || m * n > MAX_LCS_MATRIX_CELLS) {
+    return quickTokenDiff(tokensA, tokensB);
+  }
+  const dp = Array.from({ length: m + 1 }, () => new Uint32Array(n + 1));
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      if (tokensA[i - 1].id === tokensB[j - 1].id) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-      }
+      dp[i][j] = tokensA[i - 1].id === tokensB[j - 1].id
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
   }
-
-  // 回溯找出差异
   const resultA = [];
   const resultB = [];
   let i = m, j = n;
-
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && tokensA[i - 1].id === tokensB[j - 1].id) {
       resultA.unshift({ ...tokensA[i - 1], status: 'same' });
@@ -2199,13 +2797,12 @@ function lcsDiff(tokensA, tokensB) {
     } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
       resultB.unshift({ ...tokensB[j - 1], status: 'added' });
       j--;
-    } else if (i > 0) {
+    } else {
       resultA.unshift({ ...tokensA[i - 1], status: 'removed' });
       i--;
     }
   }
-
-  return { tokensA: resultA, tokensB: resultB };
+  return { tokensA: resultA, tokensB: resultB, degraded: false };
 }
 
 // 渲染 token diff 内容
@@ -2264,7 +2861,8 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
   };
 
   // 每个消息占 minimap 的百分比高度
-  const heightPerMsg = 100 / maxLen;
+  const heightPerMsg = maxLen > 0 ? 100 / maxLen : 100;
+  window.currentDiffDegraded = false;
 
   for (let i = 0; i < maxLen; i++) {
     const curr = currentMsgs[i];
@@ -2301,6 +2899,7 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
       const tokensA = tokenizeText(prevContent);
       const tokensB = tokenizeText(currContent);
       tokenDiffResult = lcsDiff(tokensA, tokensB);
+      if (tokenDiffResult.degraded) window.currentDiffDegraded = true;
     }
 
     leftHtml += renderDiffMessage(prev, displayIndex, prevTokens, status === 'removed' ? 'removed' : status === 'diff' ? 'diff' : 'same', 0, tokenDiffResult?.tokensA);
@@ -2308,8 +2907,9 @@ function renderDiffMessages(currentMsgs, prevMsgs) {
     minimapHtml += renderMinimapItem(displayIndex, status, topPct, heightPct);
   }
 
-  leftPanel.innerHTML = leftHtml || '<div style="color:#666;padding:20px">无消息</div>';
-  rightPanel.innerHTML = rightHtml || '<div style="color:#666;padding:20px">无消息</div>';
+  const degradedNotice = window.currentDiffDegraded ? '<div class="token-chart-error" style="height:auto">内容过大，已使用快速对比</div>' : '';
+  leftPanel.innerHTML = degradedNotice + (leftHtml || '<div style="color:#666;padding:20px">无消息</div>');
+  rightPanel.innerHTML = degradedNotice + (rightHtml || '<div style="color:#666;padding:20px">无消息</div>');
   minimapItems.innerHTML = minimapHtml || '<div style="color:#666;padding:8px;font-size:11px">无差异</div>';
 
   // 初始化滚动和 minimap
@@ -2393,30 +2993,39 @@ function initDiffScroll() {
   const diffContainer = document.getElementById('diffContainer');
 
   let isDragging = false;
+  let currentRatio = 0;
+  let pendingRatio = null;
+  let scrollFrame = null;
+  let minimapRect = null;
+  const maxHeight = Math.max(leftPanel.scrollHeight, rightPanel.scrollHeight);
+  const metrics = {
+    maxScroll: Math.max(leftPanel.scrollHeight - leftPanel.clientHeight, rightPanel.scrollHeight - rightPanel.clientHeight),
+    minimapHeight: minimapItems.clientHeight,
+    viewportHeight: Math.max(16, (leftPanel.clientHeight / maxHeight) * minimapItems.clientHeight),
+  };
 
-  // 更新视口位置和面板滚动
-  function updateByRatio(ratio) {
-    const maxScroll = Math.max(
-      leftPanel.scrollHeight - leftPanel.clientHeight,
-      rightPanel.scrollHeight - rightPanel.clientHeight
-    );
-
-    const scrollTop = ratio * maxScroll;
+  function flushDiffScroll() {
+    scrollFrame = null;
+    if (pendingRatio === null) return;
+    currentRatio = pendingRatio;
+    pendingRatio = null;
+    const scrollTop = currentRatio * metrics.maxScroll;
     leftPanel.scrollTop = scrollTop;
     rightPanel.scrollTop = scrollTop;
+    viewport.style.height = metrics.viewportHeight + 'px';
+    viewport.style.top = (8 + currentRatio * (metrics.minimapHeight - metrics.viewportHeight)) + 'px';
+  }
 
-    // 更新视口指示器
-    const minimapHeight = minimapItems.clientHeight;
-    const viewportHeight = Math.max(16, (leftPanel.clientHeight / Math.max(leftPanel.scrollHeight, rightPanel.scrollHeight)) * minimapHeight);
-    const viewportTop = 8 + ratio * (minimapHeight - viewportHeight);
-
-    viewport.style.height = viewportHeight + 'px';
-    viewport.style.top = viewportTop + 'px';
+  // 高频 wheel/drag 事件只记录目标比例，每个动画帧统一写一次布局。
+  function updateByRatio(ratio) {
+    pendingRatio = Math.max(0, Math.min(1, ratio));
+    if (scrollFrame === null) scrollFrame = requestAnimationFrame(flushDiffScroll);
   }
 
   // minimap 拖动
   minimap.addEventListener('mousedown', (e) => {
     isDragging = true;
+    minimapRect = minimap.getBoundingClientRect();
     handleMinimapDrag(e);
     e.preventDefault();
     e.stopPropagation();
@@ -2429,32 +3038,21 @@ function initDiffScroll() {
 
   document.addEventListener('mouseup', () => {
     isDragging = false;
+    minimapRect = null;
   });
 
   // minimap 滚轮事件 - 控制对比列表滚动
   minimap.addEventListener('wheel', (e) => {
-    const maxScroll = Math.max(
-      leftPanel.scrollHeight - leftPanel.clientHeight,
-      rightPanel.scrollHeight - rightPanel.clientHeight
-    );
-    const currentRatio = leftPanel.scrollTop / maxScroll;
     const delta = e.deltaY > 0 ? 0.01 : -0.01;
-    const newRatio = Math.max(0, Math.min(1, currentRatio + delta));
-    updateByRatio(newRatio);
+    updateByRatio((pendingRatio ?? currentRatio) + delta);
     e.preventDefault();
     e.stopPropagation();
   }, { passive: false });
 
   // diff 面板滚轮事件
   const panelWheelHandler = (e) => {
-    const maxScroll = Math.max(
-      leftPanel.scrollHeight - leftPanel.clientHeight,
-      rightPanel.scrollHeight - rightPanel.clientHeight
-    );
-    const currentRatio = leftPanel.scrollTop / maxScroll;
     const delta = e.deltaY > 0 ? 0.01 : -0.01;
-    const newRatio = Math.max(0, Math.min(1, currentRatio + delta));
-    updateByRatio(newRatio);
+    updateByRatio((pendingRatio ?? currentRatio) + delta);
     e.preventDefault();
     e.stopPropagation();
   };
@@ -2463,7 +3061,7 @@ function initDiffScroll() {
   rightPanel.addEventListener('wheel', panelWheelHandler, { passive: false });
 
   function handleMinimapDrag(e) {
-    const minimapRect = minimap.getBoundingClientRect();
+    minimapRect ??= minimap.getBoundingClientRect();
     const yRatio = Math.max(0, Math.min(1, (e.clientY - minimapRect.top - 8) / (minimapRect.height - 16)));
     updateByRatio(yRatio);
   }

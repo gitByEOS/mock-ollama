@@ -288,7 +288,7 @@ test("同 session header 的主 agent 与 subagent 按 system 指纹分到不同
     }
 });
 
-test("同 cacheScope 的 cache 读取下降会记录 cacheDrop", async () => {
+test("同 cacheScope 的 cache 读取下降均记录 cacheDrop", async () => {
     const originalFetch = globalThis.fetch;
     const originalCacheDropsPath = process.env.MOCK_OLLAMA_CACHE_DROPS_PATH;
     delete process.env.MOCK_OLLAMA_CACHE_DROPS_PATH;
@@ -297,7 +297,11 @@ test("同 cacheScope 的 cache 读取下降会记录 cacheDrop", async () => {
         requestCount++;
         return new Response(JSON.stringify({
             ...responseBody.anthropic,
-            usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: requestCount === 1 ? 10000 : 8000 },
+            usage: {
+                input_tokens: 1,
+                output_tokens: 1,
+                cache_read_input_tokens: [10000, 8000, 7000, 6000, 5000][requestCount - 1] ?? 5000,
+            },
         }), { headers: { "content-type": "application/json" } });
     };
     const app = createApp(createProviderContext({
@@ -308,10 +312,36 @@ test("同 cacheScope 的 cache 读取下降会记录 cacheDrop", async () => {
         const headers = { "content-type": "application/json", "x-claude-code-session-id": "cache-drop-session" };
         const request = { ...requestBody.anthropic, system: "cache-drop system" };
         await app.request("/v1/messages", { method: "POST", headers, body: JSON.stringify(request) });
-        await app.request("/v1/messages", { method: "POST", headers, body: JSON.stringify({ ...request, messages: [{ role: "user", content: "next" }] }) });
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ ...request, messages: [...request.messages, { role: "user", content: "next" }] }),
+        });
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ ...request, messages: [{ role: "user", content: "rewrite" }] }),
+        });
+        const stableText = "a".repeat(1000);
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ ...request, messages: [{ role: "user", content: stableText }] }),
+        });
+        await app.request("/v1/messages", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+                ...request,
+                messages: [{ role: "user", content: `${"a".repeat(500)}b${"a".repeat(499)}` }],
+            }),
+        });
 
         const logs = await (await app.request("/api/logs")).json() as Array<JsonObject>;
         assert.deepEqual(logs[1].cacheDrop, { lostTokens: 2000, prevCacheRead: 10000, currentCacheRead: 8000 });
+        assert.deepEqual(logs[2].cacheDrop, { lostTokens: 1000, prevCacheRead: 8000, currentCacheRead: 7000 });
+        assert.deepEqual(logs[3].cacheDrop, { lostTokens: 1000, prevCacheRead: 7000, currentCacheRead: 6000 });
+        assert.deepEqual(logs[4].cacheDrop, { lostTokens: 1000, prevCacheRead: 6000, currentCacheRead: 5000 });
     } finally {
         await app.request("/api/logs", { method: "DELETE" });
         globalThis.fetch = originalFetch;

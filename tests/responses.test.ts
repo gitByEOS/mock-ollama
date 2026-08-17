@@ -75,7 +75,7 @@ test("Anthropic 请求映射完整保留字段、工具和多模态顺序", () =
 
     assert.equal(converted.instructions, "规则一\n规则二");
     assert.equal(converted.max_output_tokens, undefined);
-    assert.deepEqual(converted.reasoning, { effort: "medium" });
+    assert.deepEqual(converted.reasoning, { effort: "medium", context: "all_turns" });
     assert.deepEqual(converted.tool_choice, "required");
     assert.equal(converted.parallel_tool_calls, false);
     assert.equal(converted.metadata, undefined);
@@ -92,7 +92,8 @@ test("Anthropic 请求映射完整保留字段、工具和多模态顺序", () =
 
 test("reasoning 模型未指定 thinking 时补默认 effort", () => {
     const converted = anthropicRequestToResponses({ model: "gpt-5.6-terra", stream: true });
-    assert.deepEqual(converted.reasoning, { effort: "medium" });
+    assert.deepEqual(converted.reasoning, { effort: "medium", context: "all_turns" });
+    assert.equal(converted.parallel_tool_calls, false);
 });
 
 test("thinking 配置优先于 reasoning 模型默认 effort", () => {
@@ -100,12 +101,18 @@ test("thinking 配置优先于 reasoning 模型默认 effort", () => {
         model: "gpt-5.6-terra",
         thinking: { type: "enabled", budget_tokens: 2048 },
     });
-    assert.deepEqual(converted.reasoning, { effort: "low" });
+    assert.deepEqual(converted.reasoning, { effort: "low", context: "all_turns" });
 });
 
 test("非 reasoning 模型未指定 thinking 时不补 effort", () => {
     const converted = anthropicRequestToResponses({ model: "gpt-4o" });
     assert.equal("reasoning" in converted, false);
+});
+
+test("Anthropic output_config.format 映射为 Responses text.format", () => {
+    const format = { type: "json_schema", schema: { type: "object" } };
+    const converted = anthropicRequestToResponses({ model: "gpt-5.6-sol", output_config: { format } });
+    assert.deepEqual(converted.text, { format: { ...format, name: "response" } });
 });
 
 test("Responses 请求反向映射 instructions、工具、思考和工具结果", () => {
@@ -473,6 +480,8 @@ test("Messages→Responses 处理器命中 /v1/responses 并转换响应", async
         assert.notEqual(sessionId, "claude-inbound-session");
         assert.equal(capturedHeaders.get("thread-id"), sessionId);
         assert.equal(capturedHeaders.get("x-client-request-id"), sessionId);
+        assert.equal(capturedHeaders.get("x-openai-actor-authorization"), "Bearer key");
+        assert.equal(capturedHeaders.get("x-codex-window-id"), `${sessionId}:0`);
         assert.equal(capturedBody.prompt_cache_key, sessionId);
         assert.equal(((await response.json() as JsonObject).content as JsonObject[])[0].text, "ok");
     } finally {

@@ -74,8 +74,18 @@ function stableResponsesSessionId(config: UpstreamConfig): string {
 }
 
 /** bridge 的 Responses 请求补充会话关联 header。 */
-function responsesBridgeHeaders(sessionId: string): Record<string, string> {
+function responsesBridgeHeaders(sessionId: string, apikey: string): Record<string, string> {
+    const windowId = `${sessionId}:0`;
     return {
+        "x-openai-actor-authorization": `Bearer ${apikey}`,
+        "x-codex-beta-features": "remote_compaction_v2",
+        "x-codex-window-id": windowId,
+        "x-codex-turn-metadata": JSON.stringify({
+            session_id: sessionId,
+            thread_id: sessionId,
+            window_id: windowId,
+            request_kind: "turn",
+        }),
         "originator": "codex_exec",
         "session-id": sessionId,
         "thread-id": sessionId,
@@ -98,7 +108,7 @@ export function upstreamClient(config: UpstreamConfig) {
             const isResponses = path === "/v1/responses";
             const responsesBridge = isResponses && config.apiStyle === "responses";
             const sessionId = options.inboundPromptCacheKey || stableResponsesSessionId(config);
-            const responsesHeaders = responsesBridge ? responsesBridgeHeaders(sessionId) : {};
+            const responsesHeaders = responsesBridge ? responsesBridgeHeaders(sessionId, config.apikey) : {};
             if (responsesBridge) {
                 payload.stream = true;
                 delete payload.max_output_tokens;

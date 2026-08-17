@@ -51,20 +51,25 @@ function requestSessionId(request: Request, body: unknown): string | undefined {
 }
 
 // 提取 cache 作用域：同一 cache 上下文（主 agent / subagent 各自独立）的稳定指纹
-function requestCacheScope(routePath: string, body: unknown): string | undefined {
+function requestCacheScope(routePath: string, body: unknown, sessionId?: string): string | undefined {
     if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
     const obj = body as Record<string, unknown>;
+    let discriminator: string | undefined;
     if (routePath === "/v1/responses") {
         const key = obj.prompt_cache_key;
-        return typeof key === "string" ? key : undefined;
+        discriminator = typeof key === "string" ? key : undefined;
     }
     if (routePath === "/v1/messages") {
-        return hashSystemText(obj.system);
+        discriminator = hashSystemText(obj.system);
     }
     if (routePath === "/chat/completions" || routePath === "/v1/chat/completions") {
-        return hashFirstMessage(obj.messages);
+        discriminator = hashFirstMessage(obj.messages);
     }
-    return undefined;
+    if (!discriminator) return undefined;
+    return createHash("sha1")
+        .update(JSON.stringify({ routePath, model: obj.model ?? "", sessionId: sessionId ?? "", discriminator }))
+        .digest("hex")
+        .slice(0, 8);
 }
 
 function hashSystemText(system: unknown): string | undefined {
@@ -98,7 +103,7 @@ async function proxyChatRequest(c: any, routePath: string, context: ProviderCont
     const timeNow = currentTime();
     const body = await c.req.json();
     const sessionId = requestSessionId(c.req.raw, body);
-    const cacheScope = requestCacheScope(routePath, body);
+    const cacheScope = requestCacheScope(routePath, body, sessionId);
     const chooseModel = body.model ?? "unknown";
     const userAgent = c.req.raw.headers.get("user-agent") ?? "unknown";
     const upstream = context.config.name;
@@ -236,7 +241,7 @@ async function convertedRequestWithLog(
     const request = c.req.raw as Request;
     const requestBody = await readRequestBodyForLog(request);
     const sessionId = requestSessionId(request, requestBody);
-    const cacheScope = requestCacheScope(routePath, requestBody);
+    const cacheScope = requestCacheScope(routePath, requestBody, sessionId);
     const model = objectModel(requestBody);
     const userAgent = request.headers.get("user-agent") ?? "unknown";
     console.log(`[${timeNow}] [请求] POST ${routePath} from model ${model}`);

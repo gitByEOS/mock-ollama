@@ -115,15 +115,29 @@ export function anthropicRequestToResponses(body: JsonObject): JsonObject {
     }
 
     // bridge 模式下的 Responses 上游请求保持精简，不传 metadata/user 等非必要字段。
-    const response: JsonObject = { model: body.model, input, stream: body.stream === true, store: false };
+    const response: JsonObject = {
+        model: body.model,
+        input,
+        stream: body.stream === true,
+        store: false,
+        // 当前 Codex Responses 上游只接受显式 false，避免工具请求被拒绝。
+        parallel_tool_calls: body.parallel_tool_calls ?? false,
+    };
     const instructions = systemText(body.system);
     if (instructions) response.instructions = instructions;
     for (const field of ["temperature", "top_p", "service_tier"] as const) {
         if (body[field] !== undefined) response[field] = body[field];
     }
     const effort = anthropicReasoningEffort(body);
-    if (effort) response.reasoning = { effort };
-    else if (isReasoningModel(body.model)) response.reasoning = { effort: "medium" };
+    if (effort) response.reasoning = { effort, context: "all_turns" };
+    else if (isReasoningModel(body.model)) response.reasoning = { effort: "medium", context: "all_turns" };
+    const outputFormat = object(object(body.output_config)?.format);
+    if (outputFormat) {
+        const format = outputFormat.type === "json_schema" && typeof outputFormat.name !== "string"
+            ? { ...outputFormat, name: "response" }
+            : outputFormat;
+        response.text = { format };
+    }
 
     const mappedToolNames = new Set<string>();
     const tools = array(body.tools).flatMap((rawTool): JsonObject[] => {

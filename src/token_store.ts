@@ -123,13 +123,22 @@ function continuousDaily(rows: TrendBucket[], fromDate: string, days: number): T
     });
 }
 
-function continuousHourly(rows: TrendBucket[], today: string): TrendBucket[] {
+function shiftLocalHour(hour: string, offset: number): string {
+    const value = new Date(`${hour}:00:00`);
+    value.setHours(value.getHours() + offset);
+    return dateParts(value.toISOString()).hour;
+}
+
+function continuousRollingHourly(rows: TrendBucket[], currentHour: string): TrendBucket[] {
     const byBucket = new Map(rows.map((row) => [row.bucket, row]));
-    const currentHour = Number(dateParts(new Date().toISOString()).hour.slice(11, 13));
-    return Array.from({ length: currentHour + 1 }, (_, hour) => {
-        const bucket = `${today}T${String(hour).padStart(2, "0")}`;
+    return Array.from({ length: 24 }, (_, index) => {
+        const bucket = shiftLocalHour(currentHour, index - 23);
         return byBucket.get(bucket) ?? emptyTrendBucket(bucket);
     });
+}
+
+function rollingHourStart(hour: string): string {
+    return shiftLocalHour(hour, -23);
 }
 
 function defaultDatabasePath(): string {
@@ -229,42 +238,43 @@ export class TokenUsageStore {
     }
 
     getDashboard(days = 7) {
-        const safeDays = Math.min(Math.max(Math.floor(days), 1), 90);
-        const today = dateParts(new Date().toISOString()).date;
+        const safeDays = Math.min(Math.max(Math.floor(days), 1), 30);
+        const nowHour = dateParts(new Date().toISOString()).hour;
+        const today = nowHour.slice(0, 10);
         const fromDate = shiftLocalDate(today, -safeDays + 1);
-        const totals = this.db.prepare(`
-            SELECT
-                COALESCE(SUM(total_tokens), 0) AS totalTokens,
-                COALESCE(SUM(request_count), 0) AS requestCount,
-                COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens,
-                COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens,
-                COALESCE(SUM(input_tokens), 0) AS inputTokens,
-                COALESCE(SUM(output_tokens), 0) AS outputTokens,
-                COALESCE(SUM(duration_ms), 0) AS durationMs
-            FROM daily_rollup WHERE date = ?
-        `).get(today) as Record<string, number>;
+        const rollingFromHour = shiftLocalHour(nowHour, -23);
+        const isRollingDay = safeDays === 1;
+        const totalsQuery = isRollingDay
+            ? "SELECT COALESCE(SUM(total_tokens), 0) AS totalTokens, COALESCE(SUM(input_tokens), 0) AS inputTokens, COALESCE(SUM(output_tokens), 0) AS outputTokens, COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens, COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens, COUNT(*) AS requestCount, COALESCE(SUM(duration_ms), 0) AS durationMs FROM token_logs WHERE hour >= ? AND hour <= ?"
+            : "SELECT COALESCE(SUM(total_tokens), 0) AS totalTokens, COALESCE(SUM(input_tokens), 0) AS inputTokens, COALESCE(SUM(output_tokens), 0) AS outputTokens, COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens, COALESCE(SUM(cache_creation_tokens), 0) AS cacheCreationTokens, COALESCE(SUM(request_count), 0) AS requestCount, COALESCE(SUM(duration_ms), 0) AS durationMs FROM daily_rollup WHERE date >= ? AND date <= ?";
+        const rangeParams = isRollingDay ? [rollingFromHour, nowHour] : [fromDate, today];
+        const totals = this.db.prepare(totalsQuery).get(...rangeParams) as Record<string, number>;
         const activeClients = (this.db.prepare(
-            "SELECT COUNT(DISTINCT user_agent) AS activeClients FROM token_logs WHERE date = ?",
-        ).get(today) as { activeClients: number }).activeClients;
+            isRollingDay
+                ? "SELECT COUNT(DISTINCT user_agent) AS activeClients FROM token_logs WHERE hour >= ? AND hour <= ?"
+                : "SELECT COUNT(DISTINCT user_agent) AS activeClients FROM token_logs WHERE date >= ? AND date <= ?",
+        ).get(...(isRollingDay ? [rollingFromHour, nowHour] : [fromDate, today])) as { activeClients: number }).activeClients;
         const dailyRows = this.db.prepare(`
             SELECT date AS bucket, SUM(total_tokens) AS totalTokens, SUM(input_tokens) AS inputTokens,
                    SUM(output_tokens) AS outputTokens, SUM(cache_read_tokens) AS cacheReadTokens,
                    SUM(cache_creation_tokens) AS cacheCreationTokens, SUM(request_count) AS requestCount
-            FROM daily_rollup WHERE date >= ? GROUP BY date ORDER BY date
-        `).all(fromDate) as TrendBucket[];
-        // Hourly mode is deliberately bounded to the current day; long-range trends use daily_rollup.
+            FROM daily_rollup WHERE date >= ? AND date <= ? GROUP BY date ORDER BY date
+        `).all(fromDate, today) as TrendBucket[];
         const hourlyRows = this.db.prepare(`
             SELECT hour AS bucket, SUM(total_tokens) AS totalTokens, SUM(input_tokens) AS inputTokens,
                    SUM(output_tokens) AS outputTokens, SUM(cache_read_tokens) AS cacheReadTokens,
                    SUM(cache_creation_tokens) AS cacheCreationTokens, COUNT(*) AS requestCount
-            FROM token_logs WHERE date = ? GROUP BY hour ORDER BY hour
-        `).all(today) as TrendBucket[];
+            FROM token_logs WHERE hour >= ? AND hour <= ? GROUP BY hour ORDER BY hour
+        `).all(rollingFromHour, nowHour) as TrendBucket[];
         const daily = continuousDaily(dailyRows, fromDate, safeDays);
-        const hourly = continuousHourly(hourlyRows, today);
-        const models = this.db.prepare(`
+        const hourly = continuousRollingHourly(hourlyRows, nowHour);
+        const models = (isRollingDay ? this.db.prepare(`
             SELECT model, SUM(total_tokens) AS totalTokens
-            FROM daily_rollup WHERE date >= ? GROUP BY model ORDER BY totalTokens DESC
-        `).all(fromDate);
+            FROM token_logs WHERE hour >= ? AND hour <= ? GROUP BY model ORDER BY totalTokens DESC
+        `) : this.db.prepare(`
+            SELECT model, SUM(total_tokens) AS totalTokens
+            FROM daily_rollup WHERE date >= ? AND date <= ? GROUP BY model ORDER BY totalTokens DESC
+        `)).all(...(isRollingDay ? [rollingFromHour, nowHour] : [fromDate, today]));
         const totalTokens = totals.totalTokens ?? 0;
         const inputTokens = totals.inputTokens ?? 0;
         const outputTokens = totals.outputTokens ?? 0;
@@ -282,8 +292,8 @@ export class TokenUsageStore {
             },
             range: {
                 days: safeDays,
-                from: fromDate,
-                to: today,
+                from: isRollingDay ? rollingFromHour : fromDate,
+                to: isRollingDay ? nowHour : today,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "local",
             },
             trends: { daily, hourly },
@@ -295,19 +305,24 @@ export class TokenUsageStore {
         const safeDays = Math.min(Math.max(Math.floor(days), 1), 30);
         const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
         const safeOffset = Math.max(Math.floor(offset), 0);
-        const today = dateParts(new Date().toISOString()).date;
+        const nowHour = dateParts(new Date().toISOString()).hour;
+        const today = nowHour.slice(0, 10);
         const fromDate = shiftLocalDate(today, -safeDays + 1);
-        const total = (this.db.prepare("SELECT COUNT(*) AS count FROM token_logs WHERE date >= ?").get(fromDate) as { count: number }).count;
+        const isRollingDay = safeDays === 1;
+        const range = isRollingDay ? [rollingHourStart(nowHour), nowHour] : [fromDate, today];
+        const where = isRollingDay ? "hour >= ? AND hour <= ?" : "date >= ? AND date <= ?";
+        const total = (this.db.prepare(`SELECT COUNT(*) AS count FROM token_logs WHERE ${where}`).get(...range) as { count: number }).count;
         const items = this.db.prepare(`
             SELECT id, occurred_at AS occurredAt, model, upstream,
                    input_tokens AS inputTokens, output_tokens AS outputTokens,
                    cache_read_tokens AS cacheReadTokens, cache_creation_tokens AS cacheCreationTokens,
                    total_tokens AS totalTokens, duration_ms AS durationMs, status
-            FROM token_logs WHERE date >= ?
+            FROM token_logs WHERE ${where}
             ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?
-        `).all(fromDate, safeLimit, safeOffset);
+        `).all(...range, safeLimit, safeOffset);
         return { items, total, limit: safeLimit, offset: safeOffset };
     }
+
 
     close(): void {
         this.db.close();

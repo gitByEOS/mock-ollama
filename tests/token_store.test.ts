@@ -87,7 +87,7 @@ test("趋势返回连续 bucket 与四层守恒数据", () => {
         });
         const dashboard = store.getDashboard(3);
         assert.equal(dashboard.trends.daily.length, 3);
-        assert.equal(dashboard.trends.hourly.length, now.getHours() + 1);
+        assert.equal(dashboard.trends.hourly.length, 24);
         const populated = dashboard.trends.daily.find((row) => row.totalTokens === 120)!;
         assert.deepEqual(populated, {
             bucket: populated.bucket,

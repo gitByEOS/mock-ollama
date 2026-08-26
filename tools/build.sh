@@ -130,6 +130,7 @@ done
 echo "→ 替换本地安装"
 echo "  原因: $install_reason"
 echo "  目标: $target_prefix"
+echo "  安装命令: vp install -g ."
 if [ -n "$active_command" ]; then
   echo "  活跃命令: $active_command"
 fi
@@ -139,7 +140,14 @@ fi
 if [ -n "$active_realpath" ]; then
   echo "  活跃命令解析路径: $active_realpath"
 fi
-"$install_npm_bin" --prefix "$target_prefix" install -g "$ROOT/$tgz"
+if ! command -v vp >/dev/null 2>&1; then
+  echo "✗ 未找到 vp，请先安装 vite-plus" >&2
+  exit 1
+fi
+(
+  cd "$ROOT"
+  vp install -g .
+)
 
 target_mock_ollama_bin="$target_prefix/bin/mock-ollama"
 if [ ! -x "$target_mock_ollama_bin" ]; then

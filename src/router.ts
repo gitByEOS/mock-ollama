@@ -402,7 +402,7 @@ app.get("/api/logs", (c) => {
     return c.json(getLogEntries(limit));
 });
 
-// Token 使用量仪表盘：日趋势读取预聚合表，小时趋势只扫描当天原始记录。
+// Token 使用量仪表盘：1d 使用滚动 24 小时，其余范围读取日聚合。
 app.get("/api/token-usage", (c) => {
     const days = parseInt(c.req.query("days") || "7", 10);
     return c.json(getTokenDashboard(Number.isFinite(days) ? days : 7));

@@ -90,6 +90,18 @@ test("详情 Token 使用量使用紧凑单位", () => {
     assert.match(page, /缓存: \$\{formatDetailedTokenMetric\(u\.cache_read_input_tokens\)\}/);
 });
 
+test("Token 统计范围支持 1d、7d、30d 且切换重新加载", () => {
+    assert.match(page, /id="tokenPeriod1d"[^>]*onclick="setTokenDashboardPeriod\(1\)"/);
+    assert.match(page, /id="tokenPeriod7d"[^>]*onclick="setTokenDashboardPeriod\(7\)"/);
+    assert.match(page, /id="tokenPeriod30d"[^>]*onclick="setTokenDashboardPeriod\(30\)"/);
+    assert.match(page, /fetch\(`\/api\/token-usage\?days=\$\{period\}`\)/);
+    assert.match(page, /tokenTrendGranularity = period === 1 \? 'hourly' : 'daily'/);
+    assert.match(page, /function setTokenDashboardPeriod\(days\)/);
+    assert.match(page, /void loadTokenDashboard\(\)/);
+    assert.match(page, /过去 24 小时/);
+    assert.doesNotMatch(page, /tokenHourlyButton|tokenDailyButton/);
+});
+
 test("Token 统计控件采用居中白色强调态，分页支持九个页码跳转", () => {
     assert.match(page, /class="panel-close token-dashboard-close"/);
     assert.match(page, /\.token-dashboard-close \{ display:grid; flex:0 0 auto; align-self:flex-start; padding:0; place-items:center; \}/);

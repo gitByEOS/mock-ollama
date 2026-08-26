@@ -259,6 +259,9 @@ body {
 .token-switch button:focus-visible { border-color:#777; color:#fff; outline:1px solid #888; outline-offset:2px; }
 .token-switch button.active { color:#f3f4f6; border-color:#777; background:#222; box-shadow:inset 0 -1px 0 #bbb; }
 .token-dashboard-loading { padding:56px; color:#888; text-align:center; }
+.token-dashboard-refreshing { position:relative; opacity:.7; pointer-events:none; transition:opacity .15s ease; }
+.token-dashboard-refreshing::after { position:absolute; top:16px; right:16px; width:14px; height:14px; border:2px solid #444; border-top-color:#aaa; border-radius:50%; content:''; animation:tokenDashboardSpin .7s linear infinite; }
+@keyframes tokenDashboardSpin { to { transform:rotate(360deg); } }
 body.token-dashboard-open { overflow:hidden; }
 .token-request-section { margin-top:16px; padding:16px; border:1px solid #2d2d2d; border-radius:12px; background:#1b1b1b; }
 .token-request-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
@@ -1183,7 +1186,7 @@ body.panel-open { overflow: hidden; }
     <div class="token-dashboard-header">
       <div>
         <div class="token-dashboard-title" id="tokenDashboardTitle">Token 使用量</div>
-        <div class="token-dashboard-subtitle">持久化统计 · 最近 7 天</div>
+        <div class="token-dashboard-subtitle" id="tokenDashboardSubtitle">持久化统计 · 最近 7 天</div>
       </div>
       <button class="panel-close token-dashboard-close" aria-label="关闭 Token 使用量" onclick="closeTokenDashboard()"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3 13 13M13 3 3 13"/></svg></button>
     </div>
@@ -1321,9 +1324,10 @@ let sseConnection = null;
 let expandedLogId = null;
 let viewModes = {}; // 存储每条日志的视图模式: 'friendly' 或 'raw'
 let appContextLength = 200000;
-let tokenTrendGranularity = 'daily';
+let tokenDashboardPeriod = 1;
+let tokenTrendGranularity = 'hourly';
 let tokenCharts = [];
-let tokenRequestPeriod = 7;
+let tokenRequestPeriod = 1;
 let tokenRequestOffset = 0;
 let tokenRequestData = null;
 let tokenDashboardRequestId = 0;
@@ -1605,7 +1609,7 @@ function tokenTooltipTitle(bucket) {
 }
 
 function trendLabels(items) {
-  return items.map(item => tokenTrendGranularity === 'hourly' ? `${item.bucket.slice(11)}:00` : item.bucket.slice(5));
+  return items.map(item => tokenTrendGranularity === 'hourly' ? `${item.bucket.slice(5, 13)}` : item.bucket.slice(5));
 }
 
 function renderRequestTrendChart(data) {
@@ -1654,23 +1658,17 @@ function renderTokenTrendChart(data) {
   const chartHost = document.getElementById('tokenTrendChartHost');
   const totalNode = document.getElementById('tokenTrendTotal');
   const rangeNode = document.getElementById('tokenTrendRange');
-  const hourButton = document.getElementById('tokenHourlyButton');
-  const dailyButton = document.getElementById('tokenDailyButton');
   if (!chartHost || !totalNode || !rangeNode) return;
   tokenCharts.filter(chart => chart.canvas?.id === 'tokenTrendChart').forEach(chart => chart.destroy());
   tokenCharts = tokenCharts.filter(chart => chart.canvas?.id !== 'tokenTrendChart');
   chartHost.innerHTML = '<canvas id="tokenTrendChart" role="img" aria-label="Token 用量堆叠柱状图"></canvas>';
-  hourButton?.classList.toggle('active', tokenTrendGranularity === 'hourly');
-  dailyButton?.classList.toggle('active', tokenTrendGranularity === 'daily');
-  hourButton?.setAttribute('aria-pressed', String(tokenTrendGranularity === 'hourly'));
-  dailyButton?.setAttribute('aria-pressed', String(tokenTrendGranularity === 'daily'));
   const items = data.trends?.[tokenTrendGranularity] || [];
   try {
     const trend = trendDatasets(items);
     const rangeTotal = trend.total.reduce((sum, value) => sum + value, 0);
     totalNode.textContent = formatTokenMetric(rangeTotal);
     rangeNode.textContent = tokenTrendGranularity === 'hourly'
-      ? `今日按小时 · ${data.range?.timezone || '服务端本地时间'}`
+      ? `过去 24 小时 · ${data.range?.timezone || '服务端本地时间'}`
       : `${data.range?.from || ''} 至 ${data.range?.to || ''} · ${data.range?.timezone || '服务端本地时间'}`;
     if (!trend.total.some(Boolean)) {
       chartHost.innerHTML = '<div class="token-request-empty">这段时间还没有 Token 用量</div>';
@@ -1721,23 +1719,27 @@ function renderTokenTrendChart(data) {
   }
 }
 
-function renderTokenDashboard(data) {
-  const overview = data.overview || {};
+function ensureTokenDashboardShell() {
   const body = document.getElementById('tokenDashboardBody');
+  if (!body || body.querySelector('#tokenTrendTotal')) return;
   body.className = '';
   body.innerHTML = `
     <div class="token-overview-grid">
-      <div class="token-stat-card"><div class="token-stat-label">今日 Token 用量</div><div class="token-stat-value">${formatTokenMetric(overview.totalTokens)}</div></div>
-      <div class="token-stat-card"><div class="token-stat-label">今日请求数</div><div class="token-stat-value">${formatTokenMetric(overview.requestCount)}</div></div>
-      <div class="token-stat-card"><div class="token-stat-label">活跃客户端数</div><div class="token-stat-value">${formatTokenMetric(overview.activeClients)}</div></div>
-      <div class="token-stat-card"><div class="token-stat-label">Token 缓存命中率</div><div class="token-stat-value">${((overview.cacheHitRate || 0) * 100).toFixed(1)}%</div></div>
-      <div class="token-stat-card"><div class="token-stat-label">平均生成速率</div><div class="token-stat-value">${formatRate(overview.tokensPerSecond)}</div></div>
+      <div class="token-stat-card"><div class="token-stat-label" id="tokenOverviewTotalLabel"></div><div class="token-stat-value" id="tokenOverviewTotal">—</div></div>
+      <div class="token-stat-card"><div class="token-stat-label" id="tokenOverviewRequestsLabel"></div><div class="token-stat-value" id="tokenOverviewRequests">—</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">活跃客户端数</div><div class="token-stat-value" id="tokenOverviewClients">—</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">Token 缓存命中率</div><div class="token-stat-value" id="tokenOverviewCache">—</div></div>
+      <div class="token-stat-card"><div class="token-stat-label">平均生成速率</div><div class="token-stat-value" id="tokenOverviewRate">—</div></div>
     </div>
     <div class="token-chart-grid">
       <section class="token-chart-card wide">
         <div class="token-chart-heading">
           <div><div class="token-chart-title">Tokens <span class="token-chart-total" id="tokenTrendTotal">—</span></div><div class="token-chart-range" id="tokenTrendRange"></div></div>
-          <div class="token-switch" role="group" aria-label="Token 趋势粒度"><button type="button" id="tokenHourlyButton" onclick="setTokenTrendGranularity('hourly')">按小时</button><button type="button" id="tokenDailyButton" onclick="setTokenTrendGranularity('daily')">按天</button></div>
+          <div class="token-switch" id="tokenDashboardPeriodSwitch" role="group" aria-label="Token 统计范围">
+            <button type="button" id="tokenPeriod1d" class="${tokenDashboardPeriod === 1 ? 'active' : ''}" aria-pressed="${tokenDashboardPeriod === 1}" onclick="setTokenDashboardPeriod(1)">1d</button>
+            <button type="button" id="tokenPeriod7d" class="${tokenDashboardPeriod === 7 ? 'active' : ''}" aria-pressed="${tokenDashboardPeriod === 7}" onclick="setTokenDashboardPeriod(7)">7d</button>
+            <button type="button" id="tokenPeriod30d" class="${tokenDashboardPeriod === 30 ? 'active' : ''}" aria-pressed="${tokenDashboardPeriod === 30}" onclick="setTokenDashboardPeriod(30)">30d</button>
+          </div>
         </div>
         <div class="token-chart wide-chart" id="tokenTrendChartHost"></div>
       </section>
@@ -1747,33 +1749,52 @@ function renderTokenDashboard(data) {
       </section>
       <section class="token-chart-card">
         <div class="token-chart-heading"><div class="token-chart-title">模型分布</div></div>
-        <div class="token-chart"><canvas id="tokenModelChart" role="img" aria-label="模型 Token 分布"></canvas></div>
+        <div class="token-chart" id="tokenModelChartHost"><canvas id="tokenModelChart" role="img" aria-label="模型 Token 分布"></canvas></div>
       </section>
     </div>
     <section class="token-request-section">
-      <div class="token-request-toolbar">
-        <div><div class="token-chart-title">请求明细</div><div class="token-request-meta" id="tokenRequestMeta">加载中…</div></div>
-        <div class="token-switch"><button type="button" class="${tokenRequestPeriod === 1 ? 'active' : ''}" onclick="setTokenRequestPeriod(1)">1d</button><button type="button" class="${tokenRequestPeriod === 7 ? 'active' : ''}" onclick="setTokenRequestPeriod(7)">7d</button><button type="button" class="${tokenRequestPeriod === 30 ? 'active' : ''}" onclick="setTokenRequestPeriod(30)">30d</button></div>
-      </div>
+      <div class="token-request-toolbar"><div><div class="token-chart-title">请求明细</div><div class="token-request-meta" id="tokenRequestMeta">加载中…</div></div></div>
       <div class="token-request-table">
         <div class="token-request-head" aria-hidden="true"><span>时间</span><span>模型 / 上游</span><span style="text-align:right">未缓存输入</span><span style="text-align:right">缓存读取</span><span style="text-align:right">输出</span><span style="text-align:right">总计</span></div>
         <div class="token-request-list" id="tokenRequestList"><div class="token-request-empty">加载请求明细…</div></div>
       </div>
       <div class="token-pagination" id="tokenRequestPagination"></div>
     </section>`;
+}
 
-  destroyTokenCharts();
+function renderTokenModelChart(data) {
+  const host = document.getElementById('tokenModelChartHost');
+  if (!host) return;
+  tokenCharts.filter(chart => chart.canvas?.id === 'tokenModelChart').forEach(chart => chart.destroy());
+  tokenCharts = tokenCharts.filter(chart => chart.canvas?.id !== 'tokenModelChart');
+  host.innerHTML = '<canvas id="tokenModelChart" role="img" aria-label="模型 Token 分布"></canvas>';
+  const models = data.models || [];
+  if (!models.some(item => item.totalTokens > 0)) {
+    host.innerHTML = '<div class="token-request-empty">暂无模型数据</div>';
+    return;
+  }
+  const palette = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#22d3ee'];
+  createTokenChart(document.getElementById('tokenModelChart'), {
+    type: 'doughnut', data: { labels: models.map(item => item.model), datasets: [{ data: models.map(item => item.totalTokens), backgroundColor: models.map((_, index) => palette[index % palette.length]), borderColor: '#1b1b1b', borderWidth: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined, plugins: { legend: { position: 'bottom', labels: { color: '#aaa', boxWidth: 10 } } } },
+  });
+}
+
+function renderTokenDashboard(data) {
+  ensureTokenDashboardShell();
+  const overview = data.overview || {};
+  const periodLabel = tokenDashboardPeriod === 1 ? '过去 24 小时' : `最近 ${tokenDashboardPeriod} 天`;
+  document.getElementById('tokenOverviewTotalLabel').textContent = `${periodLabel} Token 用量`;
+  document.getElementById('tokenOverviewRequestsLabel').textContent = `${periodLabel}请求数`;
+  document.getElementById('tokenOverviewTotal').textContent = formatTokenMetric(overview.totalTokens);
+  document.getElementById('tokenOverviewRequests').textContent = formatTokenMetric(overview.requestCount);
+  document.getElementById('tokenOverviewClients').textContent = formatTokenMetric(overview.activeClients);
+  document.getElementById('tokenOverviewCache').textContent = `${((overview.cacheHitRate || 0) * 100).toFixed(1)}%`;
+  document.getElementById('tokenOverviewRate').textContent = formatRate(overview.tokensPerSecond);
+  updateTokenDashboardPeriodButtons();
   renderTokenTrendChart(data);
   renderRequestTrendChart(data);
-  const palette = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb7185', '#22d3ee'];
-  if ((data.models || []).some(item => item.totalTokens > 0)) {
-    createTokenChart(document.getElementById('tokenModelChart'), {
-      type: 'doughnut', data: { labels: (data.models || []).map(item => item.model), datasets: [{ data: (data.models || []).map(item => item.totalTokens), backgroundColor: (data.models || []).map((_, index) => palette[index % palette.length]), borderColor: '#1b1b1b', borderWidth: 3 }] },
-      options: { responsive: true, maintainAspectRatio: false, animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : undefined, plugins: { legend: { position: 'bottom', labels: { color: '#aaa', boxWidth: 10 } } } },
-    });
-  } else {
-    document.getElementById('tokenModelChart').parentElement.innerHTML = '<div class="token-request-empty">暂无模型数据</div>';
-  }
+  renderTokenModelChart(data);
   renderTokenRequestList(tokenRequestData);
 }
 
@@ -1856,20 +1877,33 @@ async function loadTokenRequests() {
 async function loadTokenDashboard() {
   const requestId = ++tokenDashboardRequestId;
   const body = document.getElementById('tokenDashboardBody');
-  body.className = 'token-dashboard-loading';
-  body.textContent = '加载统计中…';
+  const dashboard = document.getElementById('tokenDashboard');
+  const hasDashboard = Boolean(window.tokenDashboardData);
+  ensureTokenDashboardShell();
+  if (hasDashboard) {
+    body.classList.add('token-dashboard-refreshing');
+  } else {
+    body.className = 'token-dashboard-loading';
+    body.textContent = '加载统计中…';
+  }
+  const period = tokenDashboardPeriod;
+  tokenTrendGranularity = period === 1 ? 'hourly' : 'daily';
+  tokenRequestPeriod = period;
+  updateTokenDashboardPeriodButtons();
   try {
-    const response = await fetch('/api/token-usage?days=7');
+    const response = await fetch(`/api/token-usage?days=${period}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (requestId !== tokenDashboardRequestId || !document.getElementById('tokenDashboard').classList.contains('open')) return;
+    if (requestId !== tokenDashboardRequestId || !dashboard.classList.contains('open')) return;
     window.tokenDashboardData = data;
+    body.classList.remove('token-dashboard-refreshing');
     renderTokenDashboard(data);
     void loadTokenRequests();
   } catch (error) {
     if (requestId !== tokenDashboardRequestId) return;
     console.error('loadTokenDashboard error:', error);
-    body.textContent = '统计加载失败，请稍后重试。';
+    body.classList.remove('token-dashboard-refreshing');
+    if (!hasDashboard) body.textContent = '统计加载失败，请稍后重试。';
   }
 }
 
@@ -1890,23 +1924,27 @@ function closeTokenDashboard() {
   tokenDashboardTrigger?.focus?.();
 }
 
-function setTokenTrendGranularity(granularity) {
-  if (granularity !== 'daily' && granularity !== 'hourly') return;
-  tokenTrendGranularity = granularity;
-  if (window.tokenDashboardData) {
-    renderTokenTrendChart(window.tokenDashboardData);
-    renderRequestTrendChart(window.tokenDashboardData);
-  }
+function updateTokenDashboardPeriodButtons() {
+  document.querySelectorAll('#tokenDashboardPeriodSwitch button').forEach(button => {
+    const active = button.textContent === `${tokenDashboardPeriod}d`;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const subtitle = document.getElementById('tokenDashboardSubtitle');
+  if (subtitle) subtitle.textContent = `持久化统计 · ${tokenDashboardPeriod === 1 ? '过去 24 小时' : `最近 ${tokenDashboardPeriod} 天`}`;
+}
+
+function setTokenDashboardPeriod(days) {
+  if (![1, 7, 30].includes(days) || days === tokenDashboardPeriod) return;
+  tokenDashboardPeriod = days;
+  tokenRequestPeriod = days;
+  tokenRequestOffset = 0;
+  void loadTokenDashboard();
 }
 
 function setTokenRequestPeriod(days) {
   tokenRequestPeriod = days;
   tokenRequestOffset = 0;
-  document.querySelectorAll('.token-request-toolbar .token-switch button').forEach(button => {
-    const active = button.textContent === `${days}d`;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
   void loadTokenRequests();
 }
 
